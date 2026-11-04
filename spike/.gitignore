@@ -1,0 +1,8 @@
+# generated corpus and run outputs (regenerate with tools/gen_corpus.py and the spike binaries)
+testdata/*.pdf
+testdata/labels.json
+testdata/overlays/
+testdata/overlays-*/
+testdata/claude-run/
+testdata/cropcheck/
+testdata/gui/frame_cost.txt

@@ -67,10 +67,12 @@ var schema = map[string]any{
 				map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"l": map[string]any{"type": "integer", "minimum": 0, "maximum": 1000},
-						"b": map[string]any{"type": "integer", "minimum": 0, "maximum": 1000},
-						"r": map[string]any{"type": "integer", "minimum": 0, "maximum": 1000},
-						"t": map[string]any{"type": "integer", "minimum": 0, "maximum": 1000},
+						// structured outputs reject minimum/maximum on integers; the
+						// 0..1000 range is stated in the system prompt instead and clamped on parse
+						"l": map[string]any{"type": "integer", "description": "thousandths of page width from the left edge, 0 to 1000"},
+						"b": map[string]any{"type": "integer", "description": "thousandths of page height from the bottom edge, 0 to 1000"},
+						"r": map[string]any{"type": "integer", "description": "thousandths of page width from the right edge, 0 to 1000"},
+						"t": map[string]any{"type": "integer", "description": "thousandths of page height from the top edge, 0 to 1000"},
 					},
 					"required":             []string{"l", "b", "r", "t"},
 					"additionalProperties": false,
@@ -101,7 +103,17 @@ func main() {
 	model := flag.String("model", "claude-opus-5-5", "model id")
 	outDir := flag.String("out", "spike/testdata/claude-run", "output directory")
 	limit := flag.Int("limit", 0, "max clusters (0 = all)")
+	noAdjust := flag.Bool("no-adjust", false, "choice only: remove the adjust field from the schema and prompt")
+	panels := flag.Bool("panels", false, "one image per candidate (no nested outlines) plus clean sample pages")
 	flag.Parse()
+	if *panels {
+		insetPerID = 0
+	}
+	if *noAdjust {
+		props := schema["properties"].(map[string]any)
+		delete(props, "adjust")
+		schema["required"] = []string{"choice", "split", "reasons"}
+	}
 	must(os.MkdirAll(*outDir, 0o755))
 
 	cases := loadCases(*overlays, *labelsPath)
@@ -152,7 +164,26 @@ func main() {
 		}
 		userText := fmt.Sprintf("Cluster %s: %d candidate rectangles, ids 0 to %d (nested outlines are inset by 3 px per id so they stay visible). Candidate labels: %s. The first image is the overlay, the following images are individual pages from the cluster. Headers and footers must be excluded. Choose the best candidate.",
 			cs.Name, len(cs.Cands), len(cs.Cands)-1, labelsOf(cs.Cands))
-		must(os.WriteFile(base+"_prompt.txt", []byte(systemPrompt+"\n\n---\n"+userText), 0o644))
+		var panelPNGs [][]byte
+		if *panels {
+			for _, c := range cs.Cands {
+				img := drawCandidates(cs.Overlay, []Candidate{c})
+				writePNG(fmt.Sprintf("%s_panel%d.png", base, c.ID), img)
+				panelPNGs = append(panelPNGs, encodePNG(img))
+			}
+			samplePNGs = samplePNGs[:0]
+			for _, smp := range cs.Samples {
+				samplePNGs = append(samplePNGs, encodePNG(smp))
+			}
+			userText = fmt.Sprintf("Cluster %s: %d candidate rectangles, ids 0 to %d. The first %d images show the cluster overlay with exactly one candidate drawn on each, in id order (the digit in the corner is the id). The remaining %d images are individual pages from the cluster without any rectangle, for reference. Candidate labels: %s. Headers and footers must be excluded. Choose the best candidate.",
+				cs.Name, len(cs.Cands), len(cs.Cands)-1, len(cs.Cands), len(cs.Samples), labelsOf(cs.Cands))
+		}
+		sysPrompt := systemPrompt
+		if *noAdjust {
+			userText += " Do not adjust coordinates; pick the candidate id only."
+			sysPrompt = strings.Replace(systemPrompt, "an optional adjustment with l, b, r, t given as thousandths of the page width or height measured from the left, bottom, right and top edges (replace the chosen rectangle entirely; use null when the candidate is right as drawn); ", "", 1)
+		}
+		must(os.WriteFile(base+"_prompt.txt", []byte(sysPrompt+"\n\n---\n"+userText), 0o644))
 
 		var ch choice
 		switch *mode {
@@ -162,7 +193,14 @@ func main() {
 		case "mock":
 			ch = choice{Choice: 0, Split: "none", Reasons: "mock"}
 		case "live":
-			blocks := []anthropic.ContentBlockParamUnion{anthropic.NewImageBlockBase64("image/png", base64.StdEncoding.EncodeToString(encodePNG(annotated)))}
+			var blocks []anthropic.ContentBlockParamUnion
+			if *panels {
+				for _, p := range panelPNGs {
+					blocks = append(blocks, anthropic.NewImageBlockBase64("image/png", base64.StdEncoding.EncodeToString(p)))
+				}
+			} else {
+				blocks = append(blocks, anthropic.NewImageBlockBase64("image/png", base64.StdEncoding.EncodeToString(encodePNG(annotated))))
+			}
 			for _, p := range samplePNGs {
 				blocks = append(blocks, anthropic.NewImageBlockBase64("image/png", base64.StdEncoding.EncodeToString(p)))
 			}
@@ -170,9 +208,9 @@ func main() {
 			t0 := time.Now()
 			resp, err := client.Messages.New(context.Background(), anthropic.MessageNewParams{
 				Model:     anthropic.Model(*model),
-				MaxTokens: 1024,
+				MaxTokens: 8192, // thinking tokens count against this budget on 5.5-generation models
 				System: []anthropic.TextBlockParam{{
-					Text:         systemPrompt,
+					Text:         sysPrompt,
 					CacheControl: anthropic.NewCacheControlEphemeralParam(),
 				}},
 				OutputConfig: anthropic.OutputConfigParam{
@@ -212,7 +250,8 @@ func main() {
 			r.chosen = ch.Choice
 		}
 		if ch.Adjust != nil {
-			final = Ratios{L: float64(ch.Adjust.L) / 1000, B: float64(ch.Adjust.B) / 1000, R: float64(ch.Adjust.R) / 1000, T: float64(ch.Adjust.T) / 1000}
+			c := func(v int) float64 { return float64(max(0, min(1000, v))) / 1000 }
+			final = Ratios{L: c(ch.Adjust.L), B: c(ch.Adjust.B), R: c(ch.Adjust.R), T: c(ch.Adjust.T)}
 		}
 		r.reasons = ch.Reasons
 		if cs.Truth != nil {
@@ -246,9 +285,15 @@ func main() {
 	}
 	if n > 0 {
 		sort.Slice(lats, func(i, j int) bool { return lats[i] < lats[j] })
-		cost := float64(inTok)*4/1e6 + float64(outTok)*20/1e6 // Opus 5.5 list prices
-		fmt.Printf("mean IoU=%.3f clipped=%d/%d latency p50=%s  tokens in=%d out=%d  est. cost at Opus 5.5 prices=$%.4f (%.4f/cluster)\n",
-			sumIoU/float64(n), clips, n, lats[len(lats)/2].Round(time.Millisecond), inTok, outTok, cost, cost/float64(n))
+		// list prices per million tokens (input, output); cache reads not counted
+		prices := map[string][2]float64{"claude-opus-5-5": {4, 20}, "claude-sonnet-5-5": {2, 10}, "claude-haiku-5-5": {0.10, 0.50}}
+		pr, ok := prices[*model]
+		if !ok {
+			pr = prices["claude-opus-5-5"]
+		}
+		cost := float64(inTok)*pr[0]/1e6 + float64(outTok)*pr[1]/1e6
+		fmt.Printf("mean IoU=%.3f clipped=%d/%d latency p50=%s  tokens in=%d out=%d  est. cost at %s list prices=$%.4f (%.4f/cluster)\n",
+			sumIoU/float64(n), clips, n, lats[len(lats)/2].Round(time.Millisecond), inTok, outTok, *model, cost, cost/float64(n))
 	}
 }
 

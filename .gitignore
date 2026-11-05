@@ -16,3 +16,9 @@ hs_err_pid*
 # Gradle
 .gradle/
 build/
+# secrets: API keys are passed through the environment only, never committed
+.env
+.env.*
+*.env
+*.key
+secrets/

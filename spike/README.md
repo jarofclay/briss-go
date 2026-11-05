@@ -17,3 +17,12 @@ Native PDFium for the cgo build came from the `pypdfium2` wheel (`pypdfium2_raw/
 with the public headers from the `chromium/pdfium` mirror; ONNX Runtime came from the
 `onnxruntime` wheel. Both are workarounds for an environment where GitHub release
 downloads are blocked, not a recommended distribution path.
+
+## Secrets
+
+This is a public fork. API keys are never written into this repository, not even in
+gitignored files. The Claude spike reads `ANTHROPIC_API_KEY` from the environment and
+writes only model responses (`*_response.json`) to the gitignored run directory. Pass the
+key inline for one command, for example `ANTHROPIC_API_KEY="$(cat ~/.config/briss/test.key)" ./claude-spike -mode live`,
+or export it in the shell session, and revoke test keys when done. In CI use repository
+secrets, and keep GitHub secret scanning with push protection enabled on the fork.

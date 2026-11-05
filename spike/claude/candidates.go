@@ -61,12 +61,14 @@ func bands(profile []int, minCount, minGap int) [][2]int {
 }
 
 // buildCandidates derives candidate rectangles from the overlay:
-//  0 legacy auto-crop (Java algorithm)
-//  1 ink bounding box (everything dark)
-//  2 ink bbox without the top band (header stripped)
-//  3 ink bbox without the bottom band (footer stripped)
-//  4 ink bbox without top and bottom bands
-//  5 (4) without narrow side columns (margin notes stripped)
+//
+//	0 legacy auto-crop (Java algorithm)
+//	1 ink bounding box (everything dark)
+//	2 ink bbox without the top band (header stripped)
+//	3 ink bbox without the bottom band (footer stripped)
+//	4 ink bbox without top and bottom bands
+//	5 (4) without narrow side columns (margin notes stripped)
+//
 // Variants are only emitted when they differ from a previous candidate.
 func buildCandidates(img *image.Gray) []Candidate {
 	w, h := img.Bounds().Dx(), img.Bounds().Dy()
@@ -166,6 +168,10 @@ func clipped(pred, gt Ratios, tol float64) bool {
 	return pred.L > gt.L+tol || pred.B > gt.B+tol || pred.R > gt.R+tol || pred.T > gt.T+tol
 }
 
+// insetPerID offsets nested candidate outlines so they stay visible when several
+// candidates share an edge; panel mode draws one candidate per image and sets it to 0.
+var insetPerID = 3
+
 // drawCandidates paints numbered rectangles on an RGBA copy of the gray image.
 func drawCandidates(g *image.Gray, cands []Candidate) *image.RGBA {
 	b := g.Bounds()
@@ -183,7 +189,7 @@ func drawCandidates(g *image.Gray, cands []Candidate) *image.RGBA {
 		col := palette[c.ID%len(palette)]
 		x0, y0 := int(c.Rect.L*float64(w)), int(c.Rect.T*float64(h))
 		x1, y1 := int((1-c.Rect.R)*float64(w)), int((1-c.Rect.B)*float64(h))
-		inset := c.ID * 3 // nested outlines stay distinguishable
+		inset := c.ID * insetPerID // nested outlines stay distinguishable (0 in panel mode)
 		drawRect(out, x0+inset, y0+inset, x1-inset, y1-inset, col, 2)
 		drawDigit(out, x0+inset+6, y0+inset+6, c.ID, col)
 	}

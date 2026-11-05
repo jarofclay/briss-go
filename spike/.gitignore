@@ -3,6 +3,6 @@ testdata/*.pdf
 testdata/labels.json
 testdata/overlays/
 testdata/overlays-*/
-testdata/claude-run/
+testdata/claude-run*/
 testdata/cropcheck/
 testdata/gui/frame_cost.txt

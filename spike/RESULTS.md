@@ -19,11 +19,11 @@ indicative and must be re-run on real books before 1.0.
 | 3 | pdfcpu page cloning | opens in viewers; bookmarks on the right pages; size within 5% of Java | 290 -> 314 pages (24 column clones); 0 text/box mismatches; 26/26 outline targets correct without any renumbering; metadata kept; encrypted source stays encrypted with the same password; output is 89% of the source size and 11 to 21% smaller than the Java output; read+apply+write 33 to 45 ms | **Pass** (named destinations not exercised: the generator produced none; add to phase-1 tests) |
 | 4 | Fyne crop editor | draggable, resizable rectangles with custom cursors at 60 fps on 4K | widget implemented (draw, move, eight resize handles with custom diagonal cursors, select, multi-rect, delete, keyboard nudge, ghost rectangle); headless test passes on the software driver; frame cost on the software renderer 75 ms (full-canvas software capture dominates; not representative of the GPU driver); GPU frame rate needs a desktop | **Pass headlessly; the 60 fps / 4K check is a desktop task** (`cd spike/gui && go run . ../testdata/overlays/book300_c00_odd_612x792_p1.png`) |
 | 5 | ONNX layout model on CPU | p50 < 400 ms per 1024 px page | CDLA PicoDet (the only layout model obtainable here): raw session.run p50 53 to 64 ms at 800x608, end-to-end p50 93 to 105 ms including resize and NMS | **Pass on latency**; accuracy below (the Apache-2.0 candidates from the plan still need to be measured) |
-| 6 | Claude propose-and-choose | mean IoU > 0.93, zero clipped, p50 < 6 s on 30 labelled clusters | harness complete (candidate generation, numbered overlays, structured JSON output, scoring); no API key in this environment, so only dry and mock modes ran; local candidate sets contain a rectangle with IoU 0.95 to 0.99 against ground truth for all 8 clusters, which is the ceiling the model has to pick from | **Blocked on credentials**; run `cd spike/claude && ANTHROPIC_API_KEY=... ./claude-spike -mode live` |
+| 6 | Claude propose-and-choose | mean IoU > 0.93, zero clipped, p50 < 6 s on 30 labelled clusters | Live on 8 clusters (2026-11-05, test key, see the Spike 6 section): choice-only with one panel per candidate gives Opus 5.5 mean IoU 0.967, 0/8 clipped, p50 5.9 s; Sonnet 5.5 0.961, 1/8 flagged at the 1% tolerance, p50 2.9 s; Haiku 5.5 0.961, 1/8, p50 3.3 s. Letting the model adjust coordinates was harmful for every model (Opus 0.851 with 2 clips, Haiku 0.56 to 0.69 on several clusters) | **Pass for choice-only** on this corpus; the 30-cluster real-document set is still to be built |
 
 Decision: **Go confirmed.** Nothing in the rendering, writing, or GUI spikes points at Rust.
-Fyne confirmed for the editor subject to the desktop fps check. The Claude gate and the
-real-document accuracy numbers remain open.
+Fyne confirmed for the editor subject to the desktop fps check. The Claude tier passes in
+choice-only form on the synthetic corpus; the real-document accuracy numbers remain open.
 
 ## Spike 1 and 2: rendering
 
@@ -150,23 +150,81 @@ Note: an early run showed 40/40 clipped; that was a corpus label bug (trailing b
 spacer lines extended the ground-truth body box below the last inked line) and is fixed
 in the generator.
 
+Addendum 2026-11-05: after `huggingface.co` and `www.modelscope.cn` were allowed in the
+environment, the model pages became reachable but the downloads still fail one hop later:
+Hugging Face redirects file downloads to `us.aws.cdn.hf.co` and ModelScope to
+`cdn-lfs-cn-1.modelscope.cn`, both denied by the proxy. Those CDN hosts need allowing
+too (`cdn-lfs.hf.co` and `cas-bridge.xethub.hf.co` are other hosts Hugging Face uses).
+The `PaddlePaddle/PP-DocLayout_plus-L` repository (Apache-2.0) holds Paddle inference
+files (`inference.json`, `inference.pdiparams`, `inference.yml`), so it needs a
+`paddle2onnx` export before `onnx_eval.py --path` can use it; the community
+`podongchip/DocLayout-YOLO-DocStructBench-ONNX` repository (Apache-2.0) has a ready
+`doclayout_yolo_docstructbench_imgsz1024.onnx`.
+
 ## Spike 6: Claude harness
 
 `spike/claude` builds candidates from the overlay: the Java legacy auto-crop port, the
 ink bounding box, the box without the top band, without the bottom band, without both,
 and without narrow side columns (only distinct variants are kept, 3 to 5 per cluster).
-It draws them numbered on the overlay and two sample pages, sends the images with a
-cached system prompt and a strict JSON schema (`output_config.format`, effort `low`,
-model `claude-opus-5-5`), parses `{choice, adjust, split, reasons}`, snaps, and scores
-IoU and clipping against ground truth; it also reports latency, token counts and cost.
+It draws them numbered on the overlay and two sample pages (or, with `-panels`, one
+clean overlay per candidate plus clean sample pages), sends the images with a cached
+system prompt and a strict JSON schema (`output_config.format`, effort `low`,
+`max_tokens` 8192), parses `{choice, adjust?, split, reasons}`, and scores IoU and
+clipping against ground truth with latency, tokens and cost.
 
 Local ceiling (best candidate per cluster versus ground truth): book 0.991 (portrait)
 and 0.946 (landscape figure pages), scans 0.952 to 0.960, two-up 0.973. The Java legacy
 rectangle alone scores 0.963 on born-digital pages but 0.85 to 0.86 on scans because it
-keeps the header band. So the choice the model has to make is real, and a correct pick
-clears the 0.93 gate on every cluster. The live run and the 30-cluster labelled set are
-outstanding; the two-up overlay and the margin-note cluster are the interesting cases
-to watch (the annotated images are in `spike/testdata/claude-run/` after a dry run).
+keeps the header band.
+
+Live runs on 2026-11-05 with a test key passed through the environment (8 clusters per
+run, prices at each model's own list rate, cache reads not counted):
+
+| Variant | Model | Mean IoU | Clipped (>1%) | Latency p50 | Cost per cluster |
+|---|---|---|---|---|---|
+| choose + adjust, one annotated overlay | Opus 5.5 | 0.851 | 2 / 8 | 4.1 s | 1.6 c |
+| choose + adjust, one annotated overlay | Sonnet 5.5 | 0.944 | 4 / 8 | 2.5 s | 0.8 c |
+| choose + adjust, one annotated overlay | Haiku 5.5 | 0.80 (3 clusters with IoU 0.56 to 0.69) | 0 / 8 | 8.5 s | 0.1 c |
+| choice only, one annotated overlay (nested outlines inset 3 px per id) | Opus 5.5 | 0.903 | 0 / 8 | 3.3 s | 1.6 c |
+| choice only, one annotated overlay | Sonnet 5.5 | 0.933 | 0 / 8 | 2.6 s | 0.8 c |
+| choice only, one annotated overlay | Haiku 5.5 | 0.961 | 1 / 8 | 1.7 s | 0.04 c |
+| **choice only, one panel per candidate** | **Opus 5.5** | **0.967** | **0 / 8** | 5.9 s (one 57 s outlier that hit the token cap) | 5.1 c (3.0 c without the outlier) |
+| choice only, one panel per candidate | Sonnet 5.5 | 0.961 | 1 / 8 | 2.9 s | 1.5 c |
+| choice only, one panel per candidate | Haiku 5.5 | 0.961 | 1 / 8 | 3.3 s | 0.08 c |
+
+What the runs showed:
+- Free-form coordinate adjustment is the weak link. Opus wrote `t: 900` for a box whose
+  top sits 90 px from the top of a 900 px image, that is a pixel coordinate where
+  thousandths-from-the-edge were asked for, and Haiku's adjustments wandered by 10 to 30%
+  of the page. Every model picked the right candidate far more reliably than it could
+  move an edge. Choice-only is the design; precision comes from the local candidates and
+  ink snapping, which is what the plan intended.
+- The first drawing style penalised tight candidates: nested outlines were inset 3 px per
+  id so they stayed visible, which made candidate 4 look as if it cut into text. Opus,
+  which takes rule 1 (never clip) most seriously, then chose looser boxes. One clean
+  panel per candidate fixed that and all three models converged on the same choices.
+- Thinking tokens count against `max_tokens` on the 5.5 generation. With 1,024 tokens
+  Haiku truncated 5 of 8 answers; 8,192 fixed it. Opus once spent the whole 8,192 budget
+  on a two-up cluster (57 s); the answer still parsed, but a per-request timeout and a
+  retry at a lower cap belong in the product.
+- The one "clip" flagged for Sonnet and Haiku is the even-page book cluster where the
+  chosen candidate strips the bottom band and the cluster median includes figure
+  captions on some pages; it is at the 1% tolerance boundary (IoU 0.946), the same box
+  Opus chose on the odd cluster without a flag.
+- Panel mode sends 5 to 7 images (4,300 to 9,900 input tokens per cluster), so cost is
+  three times the single-image estimate in the plan: about 3 c per cluster on Opus 5.5
+  (5 c with the outlier), 1.5 c on Sonnet 5.5, under 0.1 c on Haiku 5.5. A 300-page book
+  with 2 to 6 clusters costs 6 to 30 c on Opus and 3 to 9 c on Sonnet.
+
+Gate from the plan (mean IoU above 0.93, zero clipped, p50 under 6 s): Opus 5.5 passes
+outright; Sonnet 5.5 and Haiku 5.5 pass on IoU and latency with one borderline flag each.
+Recommendation: keep `claude-opus-5-5` as the default for the assist tier because
+"never clip" is the hard rule, offer Sonnet 5.5 as the budget option in settings (same
+choices on this corpus at a third of the cost), and revisit on the real-document set.
+The 30-cluster real-document set from the plan is still to be built.
+
+The test key was supplied for this session only, was never written into the repository
+or any tracked file, and should be revoked now that the runs are done.
 
 ## What changes in PLAN.md
 
@@ -183,3 +241,8 @@ to watch (the annotated images are in `spike/testdata/claude-run/` after a dry r
    snapping in the post-processing for every tier.
 7. Corpus: the synthetic generator with exact labels is worth keeping as the first
    benchmark set; real scans still need to be added.
+8. Claude tier (2026-11-05): choice-only with one panel per candidate, no free-form
+   coordinate adjustment, `max_tokens` 8192 with a timeout and lower-cap retry, cost
+   budget 3 to 5 c per cluster on Opus 5.5 or 1.5 c on Sonnet 5.5.
+9. Secrets: API keys only through the environment or the OS keychain, never in the
+   repository (public fork); `.gitignore` covers `.env`, `*.key`, `secrets/`.

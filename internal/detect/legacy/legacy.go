@@ -49,7 +49,7 @@ func (Detector) Detect(_ context.Context, req detect.Request) (detect.Candidate,
 	if !auto.Valid() {
 		auto = geom.Ratios{}
 		c.Confidence = 0
-		c.Notes = "no content edges found; keeping the whole page"
+		c.Notes = "legacy auto-crop found no usable rectangle; keeping the whole page"
 	}
 	rects := []geom.Ratios{auto}
 	if req.Options.SplitColumns {

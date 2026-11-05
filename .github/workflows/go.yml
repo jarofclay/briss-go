@@ -1,0 +1,31 @@
+# Go rewrite: vet, test and build the briss binary. The default build uses
+# PDFium compiled to WebAssembly, so no cgo or system libraries are needed.
+
+name: Go
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Cache the compiled PDFium module
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/briss-go
+          key: wazero-${{ runner.os }}-${{ hashFiles('go.sum') }}
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test -count=1 ./...
+      - name: Build
+        run: go build -o briss ./cmd/briss

@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 * [Issue-91] Migrate from JPedal to Apache PDFBox since the former has been removed from public repositories.
+* The Java sources moved to `legacy-java/`; build there with `./gradlew shadowDistZip`.
+* Go rewrite, phase 1: `cmd/briss` with the legacy command line (`-s`, `-d`, `-p`,
+  `--split-col`, `--split-row`), PDFium as WebAssembly, pdfcpu writer that keeps outlines,
+  named destinations and links on cropped and split pages. Differences from the Java
+  version: pages cluster within a 10 pt size window instead of 20 pt bins and by their
+  displayed size; a degenerate auto-crop keeps the page whole; `-d` accepts a directory.
 
 ## [2.0-alpha 5]
 

@@ -337,10 +337,48 @@ func recordFrame() {
 	}
 }
 
+// Paint statistics: a 1x1 raster is added on every rebuild; Fyne calls its
+// generator when it actually paints the frame, so the interval between calls
+// is the painted-frame interval (bounded below by Fyne's 60 Hz draw ticker).
+var paintStats struct {
+	sync.Mutex
+	last    time.Time
+	samples []time.Duration
+}
+
+func recordPaint() {
+	if !frameStats.enabled {
+		return
+	}
+	paintStats.Lock()
+	defer paintStats.Unlock()
+	now := time.Now()
+	if !paintStats.last.IsZero() {
+		if d := now.Sub(paintStats.last); d < time.Second {
+			paintStats.samples = append(paintStats.samples, d)
+		}
+	}
+	paintStats.last = now
+	if len(paintStats.samples) >= 60 {
+		sort.Slice(paintStats.samples, func(i, j int) bool { return paintStats.samples[i] < paintStats.samples[j] })
+		p50 := paintStats.samples[len(paintStats.samples)/2]
+		p95 := paintStats.samples[len(paintStats.samples)*95/100]
+		fmt.Printf("paint interval over %d frames: p50=%v p95=%v (%s)\n", len(paintStats.samples), p50.Round(100*time.Microsecond), p95.Round(100*time.Microsecond), map[bool]string{true: "PASS <=20ms", false: "FAIL >20ms"}[p95 <= 20*time.Millisecond])
+		paintStats.samples = paintStats.samples[:0]
+	}
+}
+
+var onePixel = image.NewNRGBA(image.Rect(0, 0, 1, 1))
+
 func (r *editorRenderer) rebuild() {
 	r.e.frameCount++
 	recordFrame()
 	objs := []fyne.CanvasObject{r.img}
+	if frameStats.enabled {
+		probe := canvas.NewRaster(func(w, h int) image.Image { recordPaint(); return onePixel })
+		probe.Resize(fyne.NewSize(1, 1))
+		objs = append(objs, probe)
+	}
 	if g := r.e.ghost; g != nil && r.e.mode == modeNone {
 		gr := canvas.NewRectangle(color.Transparent)
 		gr.StrokeColor, gr.StrokeWidth = colGhost, 1

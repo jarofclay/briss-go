@@ -246,3 +246,51 @@ or any tracked file, and should be revoked now that the runs are done.
    budget 3 to 5 c per cluster on Opus 5.5 or 1.5 c on Sonnet 5.5.
 9. Secrets: API keys only through the environment or the OS keychain, never in the
    repository (public fork); `.gitignore` covers `.env`, `*.key`, `secrets/`.
+
+## Addendum 2026-11-05: frame rate, DocLayout-YOLO, real PDFs
+
+**Frame rate.** The spike editor's `BRISS_FRAME_STATS=1` hook now also records the
+painted-frame interval (a 1x1 `canvas.Raster` whose generator runs at paint time). Fyne
+paints on a 60 Hz ticker, so the original "p95 under 16 ms" criterion was impossible;
+the corrected criterion is paint-interval p95 at or under 20 ms. Without a GPU, on Xvfb
+with Mesa llvmpipe and xdotool driving drags:
+
+| Display | Window | Paint p50 | Paint p95 | Windows passing |
+|---|---|---|---|---|
+| 1920x1080, 100% | 900x1000 | 16.4 to 16.9 ms | 17.6 to 19.2 ms (32 to 34 ms in 2 windows) | 9 of 11 |
+| 3840x2160, 200% (`FYNE_SCALE=2`) | 1800x2000 | 20 to 27 ms | 31 to 41 ms | 0 of 16 |
+
+The 100% result is strong evidence for real GPUs; the 200% result is CPU rasterisation of
+3.6 megapixels per frame and inconclusive. A GPU desktop run remains the decision point
+(`docs/decisions/0004-fyne-gui.md`).
+
+**DocLayout-YOLO DocStructBench.** Downloaded from the community repository
+`podongchip/DocLayout-YOLO-DocStructBench-ONNX` (Apache-2.0, 76,980,883 bytes, sha256
+`dcb395095ba65156eee4e928cefea726454571d487421e4a4ba1a4bd112e498e`; a different export
+from the one in the rapid_layout manifest). It uses Ultralytics metadata and an
+end-to-end head (`[1, 300, 6]` = box, score, class), so `onnx_eval.py --format yolo-e2e`
+has its own letterbox adapter. Crop = union of all boxes except class `abandon`.
+
+| Setting | Corpus (40 pages) | Latency p50 / p95 | Mean IoU | Clipped | Accept |
+|---|---|---|---|---|---|
+| fp32, conf 0.25 | scan_single | 992 ms / 1147 ms | 0.988 | 0 | 40 / 40 |
+| fp32, conf 0.25 | book300 | 928 ms / 1154 ms | 0.978 | 1 | 35 / 40 |
+| fp32, conf 0.4 | scan_single | 930 ms / 1061 ms | 0.987 | 1 | 39 / 40 |
+| fp32, conf 0.4 | book300 | 1035 ms / 4254 ms | 0.978 | 1 | 35 / 40 |
+
+Accuracy clears the 85% / under-1%-clipping gate on the synthetic scans; latency (raw
+session 774 to 958 ms at 1024x1024 on 4 threads) misses the 500 ms gate by about 2x.
+Ink snapping did not change acceptance for this model. Dynamic int8 quantization
+(ONNX Runtime `quantize_dynamic`, Conv and MatMul, 24 MB) is slower, not faster, on this
+CPU: 1.47 s against 0.98 s per inference on identical input, with the same accuracy on a
+4-page check (IoU 0.990). Static QDQ quantization with calibration data, a 640 px export
+or fewer sampled pages per cluster are the remaining speed options.
+
+**Real PDFs.** `raw.githubusercontent.com` is reachable, so the 38 CC-BY-SA files of
+`py-pdf/sample-files` (LaTeX book of 117 pages, multicolumn, outlines, links, forms,
+attachments, rotated and scaled pages, an encrypted file, unusual image filters) went
+through the whole Go pipeline with the new opt-in `TestRealPDFs`: 37 pass with page
+counts, outlines, named destinations and links intact, 1 is skipped because the file has
+no `/Root` and PDFium cannot open it (pypdf rejects it too). The 117-page book is
+analysed in 0.44 s and cropped end to end in 0.9 s by the CLI; the legacy crop removes its
+running header and page number and keeps every body line.

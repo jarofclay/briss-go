@@ -3,7 +3,7 @@
 
 Briss is a small application to crop PDF files. It is useful for example to crop whitespaces at the edeges so text is rendered bigger on small screens like eInk displays or tablet PCs.
 
-> **Rewrite in progress:** see [PLAN.md](PLAN.md) for the plan to rewrite Briss in Go with AI-assisted crop detection, [HANDOFF.md](HANDOFF.md) for the current state and next steps, and [spike/RESULTS.md](spike/RESULTS.md) for the week-1 measurements.
+> **Rewrite in progress:** see [PLAN.md](PLAN.md) for the plan to rewrite Briss in Go with AI-assisted crop detection, [HANDOFF.md](HANDOFF.md) for the current state and next steps, [docs/decisions](docs/decisions/README.md) for the decisions taken, and [spike/RESULTS.md](spike/RESULTS.md) for the week-1 measurements. The Java version moved to [legacy-java/](legacy-java/).
 
 It helps the user to decide what should be cropped by creating an overlay of similar pages, e.g. all pages within a PDF
  having the same size or orientation. Even and odd pages are separated too.
@@ -69,17 +69,30 @@ Cropping view:
 
 ## Build instructions
 
-### Prerequisites
-Make sure you have JDK version 11 up to 19 installed.
-
-### Build
-To build, run the following command:
+### Go rewrite (work in progress)
+The Go version lives at the repository root. It needs only Go (1.26 or newer, which
+`go` downloads automatically); PDFium runs as WebAssembly, so there is no cgo and no
+system library to install.
 
 ```
+go build -o briss ./cmd/briss
+./briss -s dogeatdog.pdf -d dogcrop.pdf --split-col
+```
+
+This build has the legacy command line above (`-s`, `-d`, `-p`, `--split-col`,
+`--split-row`); the graphical editor and the AI-assisted detection come in later
+phases. The first run compiles the PDF engine for a few seconds and caches the result
+in your user cache directory. Run the tests with `go test ./...`.
+
+### Legacy Java version
+The Java Briss 2.0 moved to `legacy-java/`. It needs a JDK from version 11 up to 19:
+
+```
+cd legacy-java
 ./gradlew shadowDistZip
 ```
 
-You can find the built version in `build/distributions`
+You can find the built version in `legacy-java/build/distributions`.
 
 ## Libraries used
  * This software uses two libraries to render and crop PDF files: 

@@ -30,17 +30,60 @@ ap.add_argument("--model", default="pp_layout_cdla", help="rapid_layout model ty
 ap.add_argument("--path", default=None, help="local .onnx file to use instead of the download")
 ap.add_argument("--exclude", default=None, help="comma-separated class names to exclude (default per model)")
 ap.add_argument("--conf", type=float, default=0.4)
+ap.add_argument("--format", default="rapid", choices=["rapid", "yolo-e2e"],
+                help="rapid: load through rapid_layout; yolo-e2e: Ultralytics end-to-end export "
+                     "(output [1, N, 6] = x1, y1, x2, y2, score, class; class names in metadata 'names')")
 args = ap.parse_args()
 
 TD, N = args.testdata, args.pages
 labels = json.load(open(os.path.join(TD, "labels.json")))
-kw = {"model_type": args.model, "conf_thresh": args.conf}
-if args.path:
-    kw["model_dir_or_path"] = args.path
-engine = RapidLayout(**kw)
+class YoloE2E:
+    """Minimal adapter for Ultralytics end-to-end (NMS-free) ONNX exports such as
+    podongchip/DocLayout-YOLO-DocStructBench-ONNX: letterbox to the model size with
+    grey padding, RGB / 255, NCHW; output boxes are in letterboxed pixels."""
+    class _Out:
+        def __init__(self, boxes, scores, names):
+            self.boxes, self.scores, self.class_names = boxes, scores, names
+    def __init__(self, path, conf):
+        import ast
+        so = ort.SessionOptions()
+        self.session = type("S", (), {})()
+        self.session.session = ort.InferenceSession(path, so, providers=["CPUExecutionProvider"])
+        s = self.session.session
+        self.size = s.get_inputs()[0].shape[2]
+        self.names = ast.literal_eval(s.get_modelmeta().custom_metadata_map["names"])
+        self.conf = conf
+    def __call__(self, img):
+        from PIL import Image
+        h, w = img.shape[:2]
+        r = min(self.size / h, self.size / w)
+        nw, nh = int(round(w * r)), int(round(h * r))
+        px, py = (self.size - nw) / 2, (self.size - nh) / 2
+        canvas = np.full((self.size, self.size, 3), 114, dtype=np.uint8)
+        canvas[int(round(py - 0.1)):int(round(py - 0.1)) + nh, int(round(px - 0.1)):int(round(px - 0.1)) + nw] = \
+            np.asarray(Image.fromarray(img[:, :, :3]).resize((nw, nh), Image.BILINEAR))
+        x = canvas.astype(np.float32).transpose(2, 0, 1)[None] / 255.0
+        out = self.session.session.run(None, {self.session.session.get_inputs()[0].name: x})[0][0]
+        boxes, scores, names = [], [], []
+        for x1, y1, x2, y2, sc, cl in out:
+            if sc < self.conf:
+                continue
+            boxes.append([(x1 - px) / r, (y1 - py) / r, (x2 - px) / r, (y2 - py) / r])
+            scores.append(float(sc)); names.append(self.names[int(cl)])
+        return YoloE2E._Out(boxes, scores, names)
+
+if args.format == "yolo-e2e":
+    if not args.path:
+        sys.exit("--format yolo-e2e needs --path")
+    engine = YoloE2E(args.path, args.conf)
+else:
+    kw = {"model_type": args.model, "conf_thresh": args.conf}
+    if args.path:
+        kw["model_dir_or_path"] = args.path
+    engine = RapidLayout(**kw)
 def norm(c): return c.lower().replace("-", "").replace("_", "").replace(" ", "")
 EXCLUDED = {norm(c) for c in (args.exclude if args.exclude is not None else DEFAULT_EXCLUDE.get(args.model, "")).split(",") if c}
-print(f"model={args.model} path={args.path or 'auto'} excluded classes={sorted(EXCLUDED)}")
+print(f"model={args.model} format={args.format} path={args.path or 'auto'} excluded classes={sorted(EXCLUDED)}")
 
 def iou(a, b):
     ix0, iy0, ix1, iy1 = max(a[0], b[0]), max(a[1], b[1]), min(a[2], b[2]), min(a[3], b[3])

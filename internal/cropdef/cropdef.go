@@ -45,6 +45,8 @@ type Source struct {
 type Options struct {
 	KeepHeaders  bool    `json:"keep_headers,omitempty"`
 	MarginPt     float64 `json:"margin_pt,omitempty"`
+	MarginPct    float64 `json:"margin_pct,omitempty"`
+	Detector     string  `json:"detector,omitempty"`
 	SplitColumns bool    `json:"split_columns,omitempty"`
 	SplitRows    bool    `json:"split_rows,omitempty"`
 }

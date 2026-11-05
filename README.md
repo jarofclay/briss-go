@@ -3,7 +3,7 @@
 
 Briss is a small application to crop PDF files. It is useful for example to crop whitespaces at the edeges so text is rendered bigger on small screens like eInk displays or tablet PCs.
 
-> **Rewrite in progress:** see [PLAN.md](PLAN.md) for the plan to rewrite Briss in Go with AI-assisted crop detection.
+> **Rewrite in progress:** see [PLAN.md](PLAN.md) for the plan to rewrite Briss in Go with AI-assisted crop detection, [HANDOFF.md](HANDOFF.md) for the current state and next steps, and [spike/RESULTS.md](spike/RESULTS.md) for the week-1 measurements.
 
 It helps the user to decide what should be cropped by creating an overlay of similar pages, e.g. all pages within a PDF
  having the same size or orientation. Even and odd pages are separated too.

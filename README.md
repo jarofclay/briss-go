@@ -76,13 +76,22 @@ system library to install.
 
 ```
 go build -o briss ./cmd/briss
-./briss -s dogeatdog.pdf -d dogcrop.pdf --split-col
 ```
 
-This build has the legacy command line above (`-s`, `-d`, `-p`, `--split-col`,
-`--split-row`); the graphical editor and the AI-assisted detection come in later
-phases. The first run compiles the PDF engine for a few seconds and caches the result
-in your user cache directory. Run the tests with `go test ./...`.
+```
+briss crop book.pdf                                  # detect and write book_cropped.pdf
+briss crop book.pdf -o small.pdf --margin 3pt --split-col
+briss detect book.pdf --save-crops book.crops.json   # save the rectangles, edit them
+briss apply book.pdf --crops book.crops.json         # crop with the edited rectangles
+briss preview book.pdf                               # overlay PNGs with the rectangles drawn
+briss bench --dataset labels/ --report bench.md      # score against labelled PDFs (docs/datasets.md)
+briss -s dogeatdog.pdf -d dogcrop.pdf --split-col    # the Briss 2.0 command line still works
+```
+
+`briss COMMAND --help` lists every option. The graphical editor and the AI-assisted
+detectors come in later phases; `--detector auto` uses the legacy auto-crop for now. The
+first run compiles the PDF engine for a few seconds and caches the result in your user
+cache directory. Run the tests with `go test ./...`.
 
 ### Legacy Java version
 The Java Briss 2.0 moved to `legacy-java/`. It needs a JDK from version 11 up to 19:

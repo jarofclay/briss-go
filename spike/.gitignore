@@ -6,3 +6,4 @@ testdata/overlays-*/
 testdata/claude-run*/
 testdata/cropcheck/
 testdata/gui/frame_cost.txt
+testdata/*.crops.json

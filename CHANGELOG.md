@@ -30,6 +30,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   named destinations and links on cropped and split pages. Differences from the Java
   version: pages cluster within a 10 pt size window instead of 20 pt bins and by their
   displayed size; a degenerate auto-crop keeps the page whole; `-d` accepts a directory.
+* Go rewrite, phase 2: subcommands `crop`, `detect`, `apply`, `preview`, `bench` and
+  `version`; crop definitions can be saved, edited and applied (`--save-crops`,
+  `--crops`); `--exclude`, `--margin`, `--password-stdin`, `--dry-run` and `--json`;
+  `briss bench` scores detectors against labelled PDFs (`docs/datasets.md`); release
+  archives from goreleaser for Linux, macOS and Windows on amd64 and arm64; CI on all
+  three systems and a gitleaks secret scan.
 
 ## [2.0-alpha 5]
 

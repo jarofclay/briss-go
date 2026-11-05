@@ -294,3 +294,33 @@ counts, outlines, named destinations and links intact, 1 is skipped because the 
 no `/Root` and PDFium cannot open it (pypdf rejects it too). The 117-page book is
 analysed in 0.44 s and cropped end to end in 0.9 s by the CLI; the legacy crop removes its
 running header and page number and keeps every body line.
+
+## Addendum 2026-11-05 (later): PP-DocLayout and the bench baseline
+
+With `cdn-lfs-cn-1.modelscope.cn` allowed, rapid_layout downloads RapidAI's ONNX
+conversions of PP-DocLayout (RapidLayout v1.2.0 manifest, SHA-256 checked by
+rapid_layout). Both have 25 classes; `header`, `footer`, `number`, `header_image` and
+`footer_image` are excluded from the crop. Input 800x800, 4 CPU threads, 40 pages each:
+
+| Model | Corpus | Latency p50 | Mean IoU | Clipped | Accept | With ink snapping |
+|---|---|---|---|---|---|---|
+| PP-DocLayoutV2 | scan_single | 856 ms | 0.983 | 1 | 39 / 40 | 0 clipped, 39 / 40 |
+| PP-DocLayoutV2 | book300 | 704 ms | 0.969 | 1 | 35 / 40 | 1 clipped, 35 / 40 |
+| PP-DocLayoutV3 | scan_single | 944 ms | 0.983 | 0 | 40 / 40 | 0 clipped, 39 / 40 |
+| PP-DocLayoutV3 | book300 | 983 ms | 0.967 | 1 | 35 / 40 | 1 clipped, 35 / 40 |
+
+(The "raw session.run" line of `onnx_eval.py` printed the shape of the first input,
+`im_shape`, for these models; the timing itself is a full inference.)
+
+Summary of the local-model tier on the synthetic corpus: DocLayout-YOLO, PP-DocLayoutV2
+and PP-DocLayoutV3 all clear the accuracy gate on scans and miss the 500 ms speed gate
+at 0.65 to 1.0 s per page; V2 is the fastest. The five book pages each model misses are
+the same kind (last body lines outside the predicted text blocks, and the two-column
+chapter), which the real-document labels will show more clearly.
+
+**Bench baseline.** `briss bench` on the synthetic corpus with labels converted by
+`spike/tools/labels_to_cropdef.py`, legacy tier:
+
+| Detector | Files | Scored pages | Mean IoU | Accepted | Clipped | Count mismatch |
+|---|---|---|---|---|---|---|
+| legacy | 3 | 467 | 0.919 | 43.7% | 0.0% | 59 (the two-up sheets) |

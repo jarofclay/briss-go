@@ -1,4 +1,4 @@
-# Handoff: state of the briss-go rewrite (2026-11-05, after phase 1)
+# Handoff: state of the briss-go rewrite (2026-11-05, after phase 2)
 
 For whoever continues this work. Everything below is committed on branch
 `claude/happy-cray-vejte7` of `jarofclay/briss-go`; the branch has not been merged and
@@ -10,7 +10,13 @@ decision with its evidence), `spike/RESULTS.md` (measurements), `spike/README.md
 
 | Path | What it is | State |
 |---|---|---|
-| `cmd/briss` | The binary. Legacy command line `-s`, `-d`, `-p`, `--split-col`, `--split-row` (case-insensitive, like Java), exit codes from PLAN.md section 6 | Working, tested |
+| `cmd/briss` | The binary: Cobra subcommands `crop`, `detect`, `apply`, `preview`, `bench`, `version`; the Briss 2.0 flags `-s`, `-d`, `-p`, `--split-col`, `--split-row` still route to the legacy path; exit codes from PLAN.md section 6 | Working, tested |
+| `internal/app` | The logic behind the subcommands: analyse and detect, crop, apply with file checks, preview, bench, margins, detector names, error kinds | Done |
+| `internal/bench` | Dataset loading (`NAME.pdf` + `NAME.crops.json`), page scoring (IoU, clipped, count, accepted, waste), summaries, Markdown | Done |
+| `internal/pagerange`, `internal/preview` | Page lists like `1-3;10`; overlay images with numbered rectangles | Done |
+| `.goreleaser.yaml`, `.github/workflows/release.yml` | Release archives for six targets on `v*` tags (draft releases) | Config validated |
+| `.gitleaks.toml`, `.pre-commit-config.yaml` | Secret scan with a rule for every Anthropic key kind; CI job and optional local hook | Verified on planted fake keys |
+| `docs/datasets.md` | Label format and where labelled data should live | Current |
 | `internal/geom` | Briss ratios, `RectangleHandler` box maths, rotation | Exact vs Java on 64 cases |
 | `internal/pdf` | PDFium engine: WebAssembly default with compilation cache, cgo behind `pdfium_cgo`; page sizes, parallel gray rendering, typed password errors, outline/named-dest/link reader | Working, tested |
 | `internal/cluster` | Parity plus size-tolerance clustering, Java sampling (float32) | Exact vs Java |
@@ -25,7 +31,7 @@ decision with its evidence), `spike/RESULTS.md` (measurements), `spike/README.md
 | `legacy-java/` | The Java Briss 2.0, moved unchanged; `tools/golden` regenerates the golden data | Builds with Gradle 7.6 on JDK 11 to 19 |
 | `docs/decisions/` | Decision records 0001 to 0009 | Current |
 | `spike/` | Week-1 spike programs and tools (separate Go modules) | Kept for reference and for `onnx_eval.py`, `gen_corpus.py`, the GUI and Claude harnesses |
-| `.github/workflows` | `go.yml` (vet, test, build) and `gradle.yml` (Java, now in `legacy-java/`) | Both run on `master` pushes and PRs only |
+| `.github/workflows` | `go.yml` (vet, test and build on Linux, macOS and Windows; gitleaks), `release.yml`, `gradle.yml` (Java, in `legacy-java/`) | Run on `master` pushes, PRs to `master` and tags only, so none has run yet on this branch |
 
 ## 2. Decisions taken
 
@@ -46,6 +52,9 @@ tier stays bit-compatible and Java quirks are fixed around it (0009).
 - DocLayout-YOLO DocStructBench: synthetic scans 40/40 accepted, 0 clipped; book 35/40, 1 clipped; about 1 s per page on 4 CPU threads (misses the 500 ms gate).
 - Claude choice-only with panels: Opus 5.5 IoU 0.967, 0 clipped, about 3 c per cluster.
 - Fyne editor on a software renderer: 60 fps at 100% scaling (9 of 11 windows), about 40 fps at 4K/200%.
+- Local layout models on the synthetic corpus: DocLayout-YOLO, PP-DocLayoutV2 and PP-DocLayoutV3 all reach 39 to 40 of 40 scans accepted, none or one clipped, and 35 of 40 book pages, at 0.65 to 1.0 s per page (V2 fastest). Accuracy gate passed, speed gate missed.
+- `briss bench` legacy baseline on the synthetic corpus: 43.7% of 467 pages accepted, 0 clipped, mean IoU 0.919.
+- gitleaks' default rules catch only `sk-ant-api03-` keys; `.gitleaks.toml` adds a rule for `sk-ant-<kind>-` keys of any kind.
 
 ## 4. Gotchas learned the hard way
 
@@ -64,16 +73,15 @@ tier stays bit-compatible and Java quirks are fixed around it (0009).
 
 ## 5. Environment of the cloud sessions
 
-Reachable: PyPI, the Go module proxy, Maven Central (rate-limited; the Google mirror `maven-central.storage-download.googleapis.com` worked), Ubuntu apt, `raw.githubusercontent.com` (so real PDFs from `py-pdf/sample-files` and `mozilla/pdf.js`), `api.anthropic.com`, `huggingface.co`, `www.modelscope.cn`, and since 2026-11-05 `us.aws.cdn.hf.co`. Blocked: GitHub release downloads, `api.github.com`, `cdn-lfs.hf.co`, `cas-bridge.xethub.hf.co`, `cdn-lfs-cn-1.modelscope.cn`, arXiv, archive.org, Gutenberg, Wikimedia. JDK 21 is installed, which Gradle 7.6 cannot run on; compile the Java tree with `javac` against the jars instead (Maven coordinates in `legacy-java/build.gradle`). Xvfb, xdotool and Mesa are installable from apt for GUI checks. Nothing session-specific is needed to continue: venvs, jars, models and caches are disposable and the commands below recreate them.
+Reachable: PyPI, the Go module proxy (gitleaks and goreleaser build from it), Maven Central (rate-limited; the Google mirror `maven-central.storage-download.googleapis.com` worked), Ubuntu apt, `raw.githubusercontent.com` (so real PDFs from `py-pdf/sample-files` and `mozilla/pdf.js`), `api.anthropic.com`, `huggingface.co`, `www.modelscope.cn`, and since 2026-11-05 `us.aws.cdn.hf.co` and `cdn-lfs-cn-1.modelscope.cn` (so rapid_layout downloads the PP-DocLayout ONNX files). Blocked: GitHub release downloads, `api.github.com`, `cdn-lfs.hf.co`, `cas-bridge.xethub.hf.co`, arXiv, archive.org, Gutenberg, Wikimedia. JDK 21 is installed, which Gradle 7.6 cannot run on; compile the Java tree with `javac` against the jars instead (Maven coordinates in `legacy-java/build.gradle`). Xvfb, xdotool and Mesa are installable from apt for GUI checks. Nothing session-specific is needed to continue: venvs, jars, models and caches are disposable and the commands below recreate them.
 
 ## 6. Open items, in order
 
-1. **Phase 2, CLI** (PLAN.md section 6): Cobra subcommands `crop`, `detect`, `preview`, `apply`, `bench`, `model`, `config`, `version` on top of `internal/pipeline`; `--save-crops`/`--crops` with `internal/cropdef`; `--exclude` (the page-range parser from `PageNumberParser`); `--json` reports; goreleaser; gitleaks in CI (decision 0007). Keep the legacy flags exactly as they are now.
-2. **Real-document labelled set** (PLAN.md 8.5): every detection gate is on synthetic data so far. Label 30 clusters from real files (the 117-page `GeoTopo.pdf`, the multicolumn and rotated samples, plus real scans) and rerun `spike/tools/onnx_eval.py` and `spike/claude`.
-3. **Tier T3 speed**: DocLayout-YOLO passes on accuracy but takes about 1 s per page; options are fewer sampled pages per cluster (5), a 640 px export, or a smaller model; measure on a typical laptop. PP-DocLayout_plus-L still needs a `paddle2onnx` export (or allow `cdn-lfs-cn-1.modelscope.cn` for the RapidAI ONNX files).
-4. **GPU frame check** (PLAN.md 7.3, decision 0004): one run of `cd spike/gui && BRISS_FRAME_STATS=1 go run . ../testdata/overlays/book300_c00_odd_612x792_p1.png` on a desktop with a GPU, at 100% and 200%.
-5. **Phases 3 and 4**: GUI (port `spike/gui/editor.go`), then detection tiers T1, T2, T3, T4 and the `auto` policy (port `spike/claude` into `internal/detect/claude`).
-6. Open questions in PLAN.md section 14 ("Jev" is still unidentified).
+1. **Real-document labelled set.** The owner has a folder of labelled PDFs. Bring it in privately (not into this public fork, see `docs/datasets.md`): a private GitHub repository attached to the session, or a Remote Control folder. If the labels are not crop definitions, write a converter to `NAME.crops.json` (`spike/tools/labels_to_cropdef.py` is the model), then run `briss bench --dataset DIR --report bench.md` for the legacy baseline and `spike/tools/onnx_eval.py` / `spike/claude` for the other tiers.
+2. **Phase 3, GUI** (PLAN.md section 7): port `spike/gui/editor.go` into `internal/gui`, start screen, cluster grid, save and load crop definitions; the GPU frame check (PLAN.md 7.3) at the end of its first week.
+3. **Phase 4, detection**: tiers T1 structural and T2 CV first (no downloads, they decide most born-digital pages), then T3 with the model the real-document bench favours (PP-DocLayoutV2 is fastest; the speed gate needs fewer sampled pages or a smaller input), then T4 by porting `spike/claude` into `internal/detect/claude`, then `auto`, `model pull` and `config` (API key in the OS keychain).
+4. **First CI run.** The workflows only run on `master`; the first push or PR there runs the three-OS test matrix and the gitleaks job for the first time. Windows was checked by cross-compiling and vetting only.
+5. Open questions in PLAN.md section 14 ("Jev" is still unidentified).
 
 ## 7. Commands
 
@@ -86,7 +94,15 @@ go build -o briss ./cmd/briss && ./briss -s testdata/pdfs/book300.pdf -d /tmp/bo
 ```
 
 ```bash
+briss bench --dataset /path/to/labels --report bench.md
+```
+
+```bash
 BRISS_REAL_PDFS=/path/to/pdfs BRISS_REAL_PDFS_PASSWORDS=openpassword go test -run RealPDFs -v ./internal/pipeline/
+```
+
+```bash
+gitleaks git --no-banner --redact --config .gitleaks.toml .
 ```
 
 ```bash

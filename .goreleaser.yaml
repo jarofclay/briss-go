@@ -1,0 +1,49 @@
+# Release builds of the briss command line (PLAN.md section 11). PDFium runs as
+# WebAssembly, so every target builds with CGO disabled on one runner.
+# Check locally with: goreleaser check && goreleaser release --snapshot --clean
+version: 2
+project_name: briss
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: briss
+    main: ./cmd/briss
+    binary: briss
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - id: briss
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE.txt
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^spike:"
+
+release:
+  draft: true
+  prerelease: auto

@@ -26,3 +26,7 @@ secrets/
 # Go build output
 /briss
 /briss.exe
+.wazero-cache/
+/briss-ci
+/briss-ci.exe
+/dist/

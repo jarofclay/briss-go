@@ -1,5 +1,6 @@
-# Go rewrite: vet, test and build the briss binary. The default build uses
-# PDFium compiled to WebAssembly, so no cgo or system libraries are needed.
+# Go rewrite: vet, test and build the briss binary on Linux, macOS and Windows.
+# The default build uses PDFium compiled to WebAssembly, so no cgo or system
+# libraries are needed. A second job scans the full history for secrets.
 
 name: Go
 
@@ -12,7 +13,13 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      BRISS_WAZERO_CACHE: ${{ github.workspace }}/.wazero-cache
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -21,11 +28,27 @@ jobs:
       - name: Cache the compiled PDFium module
         uses: actions/cache@v4
         with:
-          path: ~/.cache/briss-go
-          key: wazero-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          path: .wazero-cache
+          key: wazero-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum') }}
       - name: Vet
         run: go vet ./...
       - name: Test
         run: go test -count=1 ./...
       - name: Build
-        run: go build -o briss ./cmd/briss
+        run: go build -o briss-ci ./cmd/briss
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Install gitleaks
+        run: go install github.com/zricethezav/gitleaks/v8@v8.30.1
+      - name: Scan history and tree
+        run: |
+          "$(go env GOPATH)/bin/gitleaks" git --no-banner --redact --config .gitleaks.toml .
+          "$(go env GOPATH)/bin/gitleaks" dir --no-banner --redact --config .gitleaks.toml .

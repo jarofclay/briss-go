@@ -22,3 +22,7 @@ build/
 *.env
 *.key
 secrets/
+
+# Go build output
+/briss
+/briss.exe

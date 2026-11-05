@@ -1,4 +1,6 @@
-# This workflow will build a Java project with Gradle
+# This workflow builds the legacy Java Briss in legacy-java/ with Gradle.
+# The Java tree stays until the Go rewrite reaches parity; it also produces the
+# golden data the Go tests compare against (legacy-java/tools/golden).
 # For more information see: https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-gradle
 
 name: Java CI with Gradle
@@ -21,6 +23,9 @@ jobs:
           - 17.0.16+8
           - 19.0.2+7
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: legacy-java
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK ${{ matrix.java-version }}
@@ -40,4 +45,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Briss-2.0-${{ matrix.java-version }}
-          path: build/distributions/*.zip
+          path: legacy-java/build/distributions/*.zip

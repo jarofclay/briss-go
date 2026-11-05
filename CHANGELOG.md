@@ -42,6 +42,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   two-page sheets at the gutter; `auto` uses it for scanned PDFs. `briss preview --pages`
   draws on the pages themselves. `briss bench` runs detectors with the label's
   `keep_headers` setting and scores precomputed predictions with `--detectors dir:PATH`.
+* `briss preview --crops FILE` draws a saved crop definition (for example a label) on the
+  pages without detecting; `crop`, `apply` and `bench --report` create missing output
+  folders. The README explains downloading, building and checking labels step by step.
 
 ## [2.0-alpha 5]
 

@@ -30,3 +30,9 @@ secrets/
 /briss-ci
 /briss-ci.exe
 /dist/
+
+# review output from the README's label checks (page images of private scans)
+/review/
+/check/
+*_preview/
+*_cropped.pdf

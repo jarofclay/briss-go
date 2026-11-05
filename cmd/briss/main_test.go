@@ -236,6 +236,20 @@ func TestPreviewWritesImages(t *testing.T) {
 	if code, _, _ := runCLI(t, "preview", src, "--out", dir, "--cluster", "7"); code != exitInput {
 		t.Fatalf("missing cluster: exit %d", code)
 	}
+
+	// a saved crop definition drawn on chosen pages, no detection
+	crops := filepath.Join(t.TempDir(), "cc.crops.json")
+	runOK(t, "detect", src, "--save-crops", crops)
+	pagesDir := t.TempDir()
+	code, out, errs = runCLI(t, "preview", src, "--crops", crops, "--pages", "1-2", "--out", pagesDir)
+	mustOK(t, code, out, errs)
+	if files, _ := filepath.Glob(filepath.Join(pagesDir, "*_page*.png")); len(files) != 2 {
+		t.Fatalf("expected 2 page images, got %v", files)
+	}
+	other := copyPDF(t, "example.pdf")
+	if code, _, _ := runCLI(t, "preview", other, "--crops", crops); code != exitInput {
+		t.Fatalf("crop definition for another document: exit %d", code)
+	}
 }
 
 func TestBench(t *testing.T) {

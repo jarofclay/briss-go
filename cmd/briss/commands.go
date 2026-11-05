@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/jarofclay/briss-go/internal/app"
@@ -141,7 +142,7 @@ The Briss 2.0 command line still works:
 	root.SetOut(stdout)
 	root.SetErr(stderr)
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return usageError{err} })
-	root.AddCommand(cropCmd(stdin, stdout), detectCmd(stdin, stdout), applyCmd(stdin, stdout), previewCmd(stdin, stdout), benchCmd(stdout, stderr), versionCmd(stdout))
+	root.AddCommand(cropCmd(stdin, stdout), detectCmd(stdin, stdout), applyCmd(stdin, stdout), previewCmd(stdin, stdout, stderr), benchCmd(stdout, stderr), versionCmd(stdout))
 	return root
 }
 
@@ -273,14 +274,20 @@ func applyCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	return c
 }
 
-func previewCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
+func previewCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	var f analysisFlags
-	var outDir, pageSel string
+	var outDir, pageSel, crops string
 	var clusterID int
+	var force bool
 	c := &cobra.Command{
-		Use:     "preview SOURCE.pdf",
-		Short:   "Write overlay images (or, page by page, page images) with the detected rectangles drawn",
-		Example: "  briss preview book.pdf --out previews/\n  briss preview book.pdf --cluster 0 --margin 2%",
+		Use:   "preview SOURCE.pdf",
+		Short: "Write overlay images (or, page by page, page images) with the detected rectangles drawn",
+		Long: `preview writes PNG images with crop rectangles drawn on them; what will be
+cut away is tinted red. By default it detects and draws on the cluster
+overlays, or on every page for the scan detector. With --crops it draws a
+saved crop definition (a label, or a file from "detect --save-crops") on the
+pages instead, without detecting anything.`,
+		Example: "  briss preview book.pdf --out previews/\n  briss preview book.pdf --cluster 0 --margin 2%\n  briss preview scan.pdf --crops scan.crops.json --pages 1-10 --out check/",
 		Args:    exactlyOnePDF,
 		RunE: func(c *cobra.Command, args []string) error {
 			opts, err := f.options(stdin)
@@ -292,7 +299,16 @@ func previewCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 				return err
 			}
 			defer eng.Close()
-			paths, _, err := app.Preview(context.Background(), eng, args[0], outDir, opts, clusterID, pageSel)
+			var paths []string
+			if crops != "" {
+				var warn []string
+				paths, warn, err = app.PreviewCrops(context.Background(), eng, args[0], crops, outDir, opts.Password, pageSel, force)
+				for _, w := range warn {
+					fmt.Fprintln(stderr, "warning:", w)
+				}
+			} else {
+				paths, _, err = app.Preview(context.Background(), eng, args[0], outDir, opts, clusterID, pageSel)
+			}
 			if err != nil {
 				return err
 			}
@@ -306,6 +322,8 @@ func previewCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	c.Flags().StringVar(&outDir, "out", "", "directory for the PNG files (default SOURCE_preview/)")
 	c.Flags().IntVar(&clusterID, "cluster", -1, "only this cluster (default: all)")
 	c.Flags().StringVar(&pageSel, "pages", "", `draw on these pages instead of the cluster overlays, e.g. "1-4"`)
+	c.Flags().StringVar(&crops, "crops", "", "draw this crop definition on the pages instead of detecting")
+	c.Flags().BoolVar(&force, "force", false, "draw a crop definition made for a different file")
 	return c
 }
 
@@ -346,6 +364,9 @@ REL.pdf below the dataset.`,
 			}
 			md := rep.Markdown()
 			if report != "" {
+				if err := os.MkdirAll(filepath.Dir(report), 0o755); err != nil {
+					return fmt.Errorf("%w: %w", app.ErrWrite, err)
+				}
 				if err := os.WriteFile(report, []byte(md), 0o644); err != nil {
 					return fmt.Errorf("%w: %w", app.ErrWrite, err)
 				}
@@ -358,6 +379,7 @@ REL.pdf below the dataset.`,
 		},
 	}
 	f.register(c, false)
+	c.Flags().MarkHidden("detector") // bench takes --detectors
 	c.Flags().StringVar(&dataset, "dataset", "", "directory of PDFs with NAME.crops.json labels (required)")
 	c.MarkFlagRequired("dataset")
 	c.Flags().StringSliceVar(&detectors, "detectors", []string{"auto"}, "detectors to compare, comma-separated (dir:PATH for precomputed predictions)")

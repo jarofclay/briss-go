@@ -105,7 +105,8 @@ briss bench --dataset labels --detectors cv,dir:pred
 
 `spike/tools/layout_propose.py` writes such predictions from a rapid_layout model
 (PP-DocLayoutV3 by default). To look at labels or predictions, `briss preview PDF
---pages 1-8` draws the current detection on the pages, and
+--crops FILE.crops.json` draws a crop definition on the pages, `briss preview PDF
+--pages 1-8` draws the current detection, and
 `spike/tools/review_sheets.py PDF OUTDIR NAME=FILE.crops.json ...` draws one or more
 crop definitions on contact sheets in different colours.
 

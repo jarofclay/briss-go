@@ -67,6 +67,9 @@ func Write(ctx context.Context, src, dst string, pages map[int][]geom.Ratios, op
 	if err != nil {
 		return st, err
 	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return st, err
+	}
 	tmp, err := os.CreateTemp(filepath.Dir(dst), ".briss-*.pdf")
 	if err != nil {
 		return st, err

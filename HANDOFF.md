@@ -116,6 +116,10 @@ briss bench --dataset /path/to/briss-go.data --detectors legacy,cv,auto,dir:/pat
 ```
 
 ```bash
+briss preview scan.pdf --crops scan.crops.json --pages 1-10 --out review/scan
+```
+
+```bash
 .venv/bin/python spike/tools/review_sheets.py scan.pdf review/ label=scan.crops.json cv=pred/scan.crops.json --cols 4 --rows 3
 ```
 

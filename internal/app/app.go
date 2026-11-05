@@ -376,6 +376,22 @@ func LoadCropsFor(ctx context.Context, eng *pdf.Engine, cropsPath, src, password
 	return def, warn, nil
 }
 
+// PreviewCrops draws a saved crop definition (a label, or one made by
+// `detect --save-crops`) on the pages of src, one PNG per page or per page in
+// pages, without running any detector. It returns the paths and warnings.
+func PreviewCrops(ctx context.Context, eng *pdf.Engine, src, cropsPath, outDir, password, pages string, force bool) ([]string, []string, error) {
+	def, warn, err := LoadCropsFor(ctx, eng, cropsPath, src, password, force)
+	if err != nil {
+		return nil, nil, err
+	}
+	doc, err := eng.Open(ctx, src, password)
+	if err != nil {
+		return nil, nil, inputErr(err)
+	}
+	paths, err := previewPages(ctx, eng, &Analysis{Result: &pipeline.Result{Path: src, Doc: doc}, Def: def}, src, outDir, pages)
+	return paths, warn, err
+}
+
 // Preview writes one PNG per cluster (or only clusterID when >= 0) with the
 // detected rectangles drawn on the overlay. A page-by-page detector draws on
 // every page instead (or on the pages listed in pages). It returns the paths.

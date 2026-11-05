@@ -262,6 +262,26 @@ func TestBench(t *testing.T) {
 	if code, _, _ := runCLI(t, "bench", "--dataset", t.TempDir()); code != exitInput {
 		t.Fatalf("empty dataset: exit %d", code)
 	}
+
+	// precomputed predictions: the label itself scores perfectly, a missing
+	// directory is a usage error
+	pred := t.TempDir()
+	b, _ := os.ReadFile(label)
+	os.WriteFile(filepath.Join(pred, "example.crops.json"), b, 0o644)
+	code, out, errs = runCLI(t, "bench", "--dataset", dir, "--detectors", "dir:"+pred, "--json")
+	mustOK(t, code, out, errs)
+	var rep struct {
+		Summaries []struct {
+			Detector   string  `json:"detector"`
+			AcceptRate float64 `json:"accept_rate"`
+		} `json:"summaries"`
+	}
+	if err := json.Unmarshal([]byte(out), &rep); err != nil || len(rep.Summaries) != 1 || rep.Summaries[0].AcceptRate != 1 {
+		t.Fatalf("dir: detector: %v\n%s", err, out)
+	}
+	if code, _, _ := runCLI(t, "bench", "--dataset", dir, "--detectors", "dir:"+filepath.Join(pred, "nope")); code != exitInput {
+		t.Fatalf("missing prediction dir: exit %d", code)
+	}
 }
 
 func TestExitCodes(t *testing.T) {

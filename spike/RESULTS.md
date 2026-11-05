@@ -324,3 +324,72 @@ chapter), which the real-document labels will show more clearly.
 | Detector | Files | Scored pages | Mean IoU | Accepted | Clipped | Count mismatch |
 |---|---|---|---|---|---|---|
 | legacy | 3 | 467 | 0.919 | 43.7% | 0.0% | 59 (the two-up sheets) |
+
+## Addendum 2026-11-05 (evening): the scan tier on real scans
+
+**Data.** The owner's private data repository holds ten photocopied book scans: 171
+landscape sheets, almost all showing two pages, some with `/Rotate 90`, one with an OCR
+text layer. They show everything the synthetic scans lack: binding shadows from narrow
+and dithered to wide and smooth, black scanner lids and borders, stacked page edges
+with fragments of other pages' text, pencil call numbers and library stamps, title and
+photo pages, contents pages, side notes and footnotes. The files and their names stay in
+that repository.
+
+**Labels.** Drafted, not yet owner-reviewed (method in `docs/datasets.md`): proposals
+from the scan detector (an intermediate version) and from PP-DocLayoutV3; 138 of 171
+sheets agreed at IoU >= 0.9, and every disagreement plus every agreed sheet with an edge
+more than 1.5% apart was reviewed by eye. Of 334 rectangles 236 came from the scan
+detector, 85 from PP-DocLayoutV3 and 13 were drawn by hand. All labels keep running
+headers and page numbers. Because the labels come from the two detectors being measured,
+both numbers below are upper bounds, the scan detector's more so.
+
+**Results** (`briss bench`, 4 CPU threads, headers kept as the labels say):
+
+| Detector | Sheets | Mean IoU | Accepted | Clipped | Count mismatch | Time for 171 sheets |
+|---|---|---|---|---|---|---|
+| legacy (T0) | 171 | 0.811 | 0.0% | 6.4% | 163 | 3.6 s |
+| cv (T2) | 171 | 0.973 | 78.4% | 12.3% | 1 | 10.0 s |
+| auto (picked cv for all ten) | 171 | 0.973 | 78.4% | 12.3% | 1 | 10.3 s |
+| PP-DocLayoutV3 (precomputed, `layout_propose.py`) | 171 | 0.936 | 76.0% | 17.5% | 0 | about 160 s |
+
+The legacy tier cannot split a two-page sheet and works on the cluster overlay, which
+on photocopies blurs because every sheet sits a little differently on the glass; it
+accepts nothing. The scan tier works page by page. Its remaining failures: running
+headers cut off by the top of the scan (only the bottom 2 or 3 pixel rows of the letters
+survive, too little to read as text; 8 sheets), fragments of other pages' text in the
+stacked page edges beside a left page, pencil call numbers and handwritten notes joining
+title-page and end-of-chapter blocks, one missed block of notes at the bottom of a page
+and one missed page on a sheet. PP-DocLayoutV3 clips more often (its boxes miss short last lines, cut-off headers
+and some gutter-side text) but never miscounts pages.
+
+On the synthetic corpus the same build gives:
+
+| Detector | File | Pages | Accepted | Clipped | Mean IoU |
+|---|---|---|---|---|---|
+| legacy | book300 (born-digital) | 290 | 204 | 0 | 0.944 |
+| cv | book300 | 290 | 240 | 38 | 0.954 |
+| cv (= auto) | scan_single | 118 | 74 | 13 | 0.948 |
+| cv (= auto) | scan_twoup | 59 | 24 | 24 | 0.930 |
+| legacy | scan_single / scan_twoup | 177 | 0 | 0 (59 count mismatches) | 0.853 / 0.928 |
+
+Most synthetic "clips" are 1.0 to 1.2% of the page at the top or bottom: the synthetic
+labels are layout boxes that sit a few pixels outside the ink, while the scan tier is
+tight to the ink plus 0.3%. More padding helps the synthetic set and hurts the real one
+(0.6% padding: synthetic 74.7%, real 73.7%; 1%: 74.1% and 39.2%), so the padding stays at
+0.3% and users add margin with `--margin`. The other synthetic misses are figures drawn
+as light grey boxes, which the Otsu threshold treats as paper.
+
+**What changed in the scan tier to get there** (each checked against the labels, not
+only by eye): content blocks are built from text lines (marks side by side on a
+baseline) and figures (groups with a large solid mark) instead of row and column bands,
+so specks, dust and stacked page edges no longer stretch a block; marks that join a
+block from outside (page numbers, short headings) must be glyph-sized, solid and on
+clean paper rather than in a shadow; side marks must sit on a text line's baseline,
+fitted with its skew (the page-number column of a contents page); wide smooth binding
+shadows are flattened column by column before thresholding while narrow dark gutters
+are left alone; glyphs cut by the scan border are given back; when several empty column
+runs could be the gutter, the darkest (the binding shadow) wins; a detached full-width
+last line stays as body text. Gates: the scan tier ships in 1.0 regardless (PLAN.md
+8.6), but it is below the 85% acceptance target on these scans and its clipping rate is
+far above 1%, so the GUI must show its result for review rather than apply it silently.
+PP-DocLayoutV3 fails the T3 gate on real scans (76.0% accepted, 17.5% clipped).

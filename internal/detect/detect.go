@@ -42,3 +42,20 @@ type Detector interface {
 	Available(ctx context.Context) error
 	Detect(ctx context.Context, req Request) (Candidate, error)
 }
+
+// PageResult is a page detector's answer for one page.
+type PageResult struct {
+	Rects      []geom.Ratios // rectangles in output order (left page first on a two-up sheet)
+	Confidence float64
+	Notes      string
+}
+
+// PageDetector is a tier that works on every page on its own instead of on a
+// cluster overlay, for scans whose pages shift from sheet to sheet. The
+// pipeline renders each page RenderWidth pixels wide and calls DetectPage,
+// concurrently for different pages; DetectPage must not keep img.
+type PageDetector interface {
+	Detector
+	RenderWidth() int
+	DetectPage(img *image.Gray, opts Options) PageResult
+}

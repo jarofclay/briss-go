@@ -30,7 +30,7 @@ type analysisFlags struct {
 
 func (f *analysisFlags) register(c *cobra.Command, withPassword bool) {
 	fl := c.Flags()
-	fl.StringVar(&f.detector, "detector", "auto", "detection tier: "+strings.Join(app.Detectors, ", ")+" (auto is legacy in this build)")
+	fl.StringVar(&f.detector, "detector", "auto", "detection tier: "+strings.Join(app.Detectors, ", ")+" (auto: cv for scans, legacy otherwise)")
 	fl.BoolVar(&f.splitCol, "split-col", false, "split every rectangle into two columns")
 	fl.BoolVar(&f.splitRow, "split-row", false, "split every rectangle into two rows")
 	fl.StringVar(&f.exclude, "exclude", "", `pages kept out of clustering, each cropped on its own, e.g. "1-3;10"`)
@@ -275,11 +275,11 @@ func applyCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 
 func previewCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	var f analysisFlags
-	var outDir string
+	var outDir, pageSel string
 	var clusterID int
 	c := &cobra.Command{
 		Use:     "preview SOURCE.pdf",
-		Short:   "Write overlay images with the detected rectangles drawn",
+		Short:   "Write overlay images (or, page by page, page images) with the detected rectangles drawn",
 		Example: "  briss preview book.pdf --out previews/\n  briss preview book.pdf --cluster 0 --margin 2%",
 		Args:    exactlyOnePDF,
 		RunE: func(c *cobra.Command, args []string) error {
@@ -292,7 +292,7 @@ func previewCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 				return err
 			}
 			defer eng.Close()
-			paths, _, err := app.Preview(context.Background(), eng, args[0], outDir, opts, clusterID)
+			paths, _, err := app.Preview(context.Background(), eng, args[0], outDir, opts, clusterID, pageSel)
 			if err != nil {
 				return err
 			}
@@ -305,6 +305,7 @@ func previewCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	f.register(c, true)
 	c.Flags().StringVar(&outDir, "out", "", "directory for the PNG files (default SOURCE_preview/)")
 	c.Flags().IntVar(&clusterID, "cluster", -1, "only this cluster (default: all)")
+	c.Flags().StringVar(&pageSel, "pages", "", `draw on these pages instead of the cluster overlays, e.g. "1-4"`)
 	return c
 }
 
@@ -319,8 +320,11 @@ func benchCmd(stdout, stderr io.Writer) *cobra.Command {
 		Long: `bench runs detectors on every labelled PDF below a directory and reports how
 close the results are to the labels. A PDF is labelled by a crop definition
 next to it named NAME.crops.json, in the format "briss detect --save-crops"
-writes; correct such a file by hand (or in the editor, later) to make a label.`,
-		Example: "  briss bench --dataset ~/briss-labels --report bench.md\n  briss bench --dataset labels --detectors legacy,auto --json",
+writes; correct such a file by hand (or in the editor, later) to make a label.
+Detectors run with the label's keep_headers setting. A detector named
+dir:PATH scores predictions made elsewhere: PATH/REL.crops.json for each
+REL.pdf below the dataset.`,
+		Example: "  briss bench --dataset ~/briss-labels --report bench.md\n  briss bench --dataset labels --detectors legacy,auto --json\n  briss bench --dataset labels --detectors cv,dir:predictions/layout",
 		Args:    cobra.NoArgs,
 		RunE: func(c *cobra.Command, args []string) error {
 			opts, err := f.options(nil)
@@ -356,7 +360,7 @@ writes; correct such a file by hand (or in the editor, later) to make a label.`,
 	f.register(c, false)
 	c.Flags().StringVar(&dataset, "dataset", "", "directory of PDFs with NAME.crops.json labels (required)")
 	c.MarkFlagRequired("dataset")
-	c.Flags().StringSliceVar(&detectors, "detectors", []string{"auto"}, "detectors to compare, comma-separated")
+	c.Flags().StringSliceVar(&detectors, "detectors", []string{"auto"}, "detectors to compare, comma-separated (dir:PATH for precomputed predictions)")
 	c.Flags().StringSliceVar(&passwords, "password", nil, "passwords to try on encrypted PDFs (repeatable)")
 	c.Flags().StringVar(&report, "report", "", "also write the Markdown report to this file")
 	c.Flags().BoolVar(&asJSON, "json", false, "print the full report as JSON")

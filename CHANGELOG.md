@@ -36,6 +36,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   `briss bench` scores detectors against labelled PDFs (`docs/datasets.md`); release
   archives from goreleaser for Linux, macOS and Windows on amd64 and arm64; CI on all
   three systems and a gitleaks secret scan.
+* Go rewrite, scan detector: `--detector cv` finds the content of every scanned page on
+  its own (ink mask with binding shadows flattened, scanner borders, page edges and dust
+  removed, text lines and figures grouped, page numbers and headings joined) and splits
+  two-page sheets at the gutter; `auto` uses it for scanned PDFs. `briss preview --pages`
+  draws on the pages themselves. `briss bench` runs detectors with the label's
+  `keep_headers` setting and scores precomputed predictions with `--detectors dir:PATH`.
 
 ## [2.0-alpha 5]
 

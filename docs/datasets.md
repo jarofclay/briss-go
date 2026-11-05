@@ -62,6 +62,8 @@ edges (`l`, `b`, `r`, `t`); `{0,0,0,0}` keeps the whole page.
   in output order.
 - An empty override (`"1": []`) means the page must not be cropped.
 - Pages with no rectangle anywhere in the label are not scored.
+- `options.keep_headers: true` says the rectangles include running headers, footers
+  and page numbers; `briss bench` then runs every detector with headers kept.
 - `source.pages` must equal the PDF's page count; `source.sha256` is optional and only
   produces a warning when it differs.
 
@@ -88,6 +90,35 @@ For each labelled page the predicted rectangles are compared with the label:
 ```bash
 briss bench --dataset labels --detectors legacy --report bench.md
 ```
+
+Predictions made by something other than briss (a script, a model run elsewhere, an
+earlier version) are scored with a `dir:` detector: `dir:PATH` reads
+`PATH/REL.crops.json` for each `REL.pdf` of the dataset.
+
+```bash
+python3 spike/tools/layout_propose.py labels/novel.pdf pred/novel.crops.json --keep-headers
+```
+
+```bash
+briss bench --dataset labels --detectors cv,dir:pred
+```
+
+`spike/tools/layout_propose.py` writes such predictions from a rapid_layout model
+(PP-DocLayoutV3 by default). To look at labels or predictions, `briss preview PDF
+--pages 1-8` draws the current detection on the pages, and
+`spike/tools/review_sheets.py PDF OUTDIR NAME=FILE.crops.json ...` draws one or more
+crop definitions on contact sheets in different colours.
+
+## Drafting labels from two detectors
+
+The real-scan set was labelled this way, which is much faster than drawing every
+rectangle: run two independent detectors (here `cv` and PP-DocLayoutV3), accept the
+sheets where they agree (same count, IoU >= 0.9 per rectangle, no edge more than 1.5%
+apart), and look at every other sheet, zoomed in on the disputed edges, choosing one
+proposal per rectangle or drawing one by hand. Record each choice so the labels can be
+rebuilt and audited. The catch is proposer bias: both detectors score better against
+such labels than against labels drawn from scratch, so treat the numbers as an upper
+bound until a person has reviewed the labels.
 
 ## Other label formats
 

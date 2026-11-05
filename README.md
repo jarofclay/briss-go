@@ -88,8 +88,10 @@ briss bench --dataset labels/ --report bench.md      # score against labelled PD
 briss -s dogeatdog.pdf -d dogcrop.pdf --split-col    # the Briss 2.0 command line still works
 ```
 
-`briss COMMAND --help` lists every option. The graphical editor and the AI-assisted
-detectors come in later phases; `--detector auto` uses the legacy auto-crop for now. The
+`briss COMMAND --help` lists every option. `--detector auto` picks the scan detector
+(`cv`, page by page, splits two-page sheets at the gutter) for scanned PDFs and the
+legacy auto-crop for the rest; the graphical editor, the structural detector for
+born-digital PDFs and the AI-assisted detectors come in later phases. The
 first run compiles the PDF engine for a few seconds and caches the result in your user
 cache directory. Run the tests with `go test ./...`.
 

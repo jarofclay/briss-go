@@ -8,7 +8,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,6 +22,7 @@ import (
 	"github.com/jarofclay/briss-go/internal/crop"
 	"github.com/jarofclay/briss-go/internal/cropdef"
 	"github.com/jarofclay/briss-go/internal/detect"
+	"github.com/jarofclay/briss-go/internal/detect/cv"
 	"github.com/jarofclay/briss-go/internal/detect/legacy"
 	"github.com/jarofclay/briss-go/internal/geom"
 	"github.com/jarofclay/briss-go/internal/pagerange"
@@ -38,16 +41,49 @@ var (
 // Detectors lists the detector names the command line accepts.
 var Detectors = []string{"auto", "legacy", "structural", "cv", "ml", "claude"}
 
-// DetectorByName returns the detector for a --detector value. In this build
-// only the legacy tier exists, and auto resolves to it.
+// DetectorByName returns the detector for a --detector value. "auto" is
+// resolved per document by Analyze (scans get cv, born-digital PDFs legacy),
+// so here it returns nil with no error.
 func DetectorByName(name string) (detect.Detector, error) {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "", "auto", "legacy":
+	case "", "auto":
+		return nil, nil
+	case "legacy":
 		return legacy.Detector{}, nil
-	case "structural", "cv", "ml", "claude":
+	case "cv":
+		return cv.New(), nil
+	case "structural", "ml", "claude":
 		return nil, fmt.Errorf("%w: the %s detector is not part of this build yet (PLAN.md section 9, phase 4)", ErrUnavailable, name)
 	}
 	return nil, fmt.Errorf("%w: unknown detector %q (choose one of %s)", ErrInput, name, strings.Join(Detectors, ", "))
+}
+
+// autoDetector picks the tier for a document: cv when the sampled pages are
+// scans (one image covering most of the page and little or no text), legacy
+// otherwise, until the structural tier exists.
+func autoDetector(ctx context.Context, eng *pdf.Engine, res *pipeline.Result) (detect.Detector, string, error) {
+	var sample []int
+	for _, c := range res.Clusters {
+		for i, p := range c.Cluster.Sample {
+			if i < 3 {
+				sample = append(sample, p-1)
+			}
+		}
+	}
+	kinds, err := eng.PageKinds(ctx, res.Doc, sample)
+	if err != nil {
+		return nil, "", err
+	}
+	scans := 0
+	for _, k := range kinds {
+		if k.Scanned() {
+			scans++
+		}
+	}
+	if len(kinds) > 0 && scans*2 > len(kinds) {
+		return cv.New(), fmt.Sprintf("auto: %d of %d sampled pages are scans", scans, len(kinds)), nil
+	}
+	return legacy.Detector{}, fmt.Sprintf("auto: %d of %d sampled pages are scans", scans, len(kinds)), nil
 }
 
 // Margin is padding added around detected rectangles.
@@ -135,12 +171,32 @@ func Analyze(ctx context.Context, eng *pdf.Engine, src string, opts Options) (*A
 			return nil, fmt.Errorf("%w: excluded page %d is beyond the last page %d", ErrInput, p, len(res.Doc.Pages))
 		}
 	}
-	if err := res.Detect(ctx, det, opts.Detect); err != nil {
+	autoNote := ""
+	if det == nil {
+		if det, autoNote, err = autoDetector(ctx, eng, res); err != nil {
+			return nil, inputErr(err)
+		}
+	}
+	if pd, ok := det.(detect.PageDetector); ok {
+		if err := detectPages(ctx, eng, res, pd, opts.Detect); err != nil {
+			return nil, inputErr(err)
+		}
+	} else if err := res.Detect(ctx, det, opts.Detect); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
 	for _, c := range res.Clusters {
 		for i, r := range c.Candidate.Rects {
 			c.Candidate.Rects[i] = opts.Margin.Apply(r, c.Cluster.Width, c.Cluster.Height)
+		}
+		for p, rs := range c.Candidate.PerPage {
+			pi := res.Doc.Pages[p-1]
+			for i, r := range rs {
+				rs[i] = opts.Margin.Apply(r, pi.Width, pi.Height)
+			}
+		}
+		if autoNote != "" {
+			c.Candidate.Notes = strings.TrimSpace(autoNote + "; " + c.Candidate.Notes)
+			c.Candidate.Notes = strings.TrimSuffix(c.Candidate.Notes, ";")
 		}
 	}
 	def, err := res.Definition(opts.Detect, excl)
@@ -321,11 +377,20 @@ func LoadCropsFor(ctx context.Context, eng *pdf.Engine, cropsPath, src, password
 }
 
 // Preview writes one PNG per cluster (or only clusterID when >= 0) with the
-// detected rectangles drawn on the overlay. It returns the written paths.
-func Preview(ctx context.Context, eng *pdf.Engine, src, outDir string, opts Options, clusterID int) ([]string, *Analysis, error) {
+// detected rectangles drawn on the overlay. A page-by-page detector draws on
+// every page instead (or on the pages listed in pages). It returns the paths.
+func Preview(ctx context.Context, eng *pdf.Engine, src, outDir string, opts Options, clusterID int, pages string) ([]string, *Analysis, error) {
 	a, err := Analyze(ctx, eng, src, opts)
 	if err != nil {
 		return nil, nil, err
+	}
+	perPage := false
+	for _, c := range a.Result.Clusters {
+		perPage = perPage || len(c.Candidate.PerPage) > 0
+	}
+	if perPage || pages != "" {
+		paths, err := previewPages(ctx, eng, a, src, outDir, pages)
+		return paths, a, err
 	}
 	if outDir == "" {
 		outDir = strings.TrimSuffix(src, filepath.Ext(src)) + "_preview"
@@ -385,6 +450,12 @@ func Bench(ctx context.Context, eng *pdf.Engine, req BenchRequest) (*bench.Repor
 		dets = []string{"auto"}
 	}
 	for _, d := range dets {
+		if dir, ok := strings.CutPrefix(d, bench.DirPrefix); ok {
+			if st, err := os.Stat(dir); err != nil || !st.IsDir() {
+				return nil, fmt.Errorf("%w: %s is not a directory of predictions", ErrInput, dir)
+			}
+			continue
+		}
 		if _, err := DetectorByName(d); err != nil {
 			return nil, err
 		}
@@ -401,28 +472,37 @@ func Bench(ctx context.Context, eng *pdf.Engine, req BenchRequest) (*bench.Repor
 			fr := bench.FileResult{File: rel, Detector: d}
 			opts := req.Options
 			opts.Detector = d
-			var a *Analysis
-			for _, pw := range passwords {
-				opts.Password = pw
-				a, err = Analyze(ctx, eng, it.PDF, opts)
-				if !errors.Is(err, pdf.ErrPasswordRequired) && !errors.Is(err, pdf.ErrBadPassword) {
-					break
+			opts.Detect.KeepHeaders = opts.Detect.KeepHeaders || it.KeepHeaders // ask for what the label holds
+			var def *cropdef.Definition
+			if dir, ok := strings.CutPrefix(d, bench.DirPrefix); ok {
+				def, err = bench.Precomputed(dir, rel)
+			} else {
+				var a *Analysis
+				for _, pw := range passwords {
+					opts.Password = pw
+					a, err = Analyze(ctx, eng, it.PDF, opts)
+					if !errors.Is(err, pdf.ErrPasswordRequired) && !errors.Is(err, pdf.ErrBadPassword) {
+						break
+					}
+				}
+				if err == nil {
+					def = a.Def
 				}
 			}
 			switch {
 			case err != nil:
 				fr.Error = err.Error()
-			case a.Def.Source.Pages != it.Pages:
-				fr.Error = fmt.Sprintf("label is for %d pages, the PDF has %d", it.Pages, a.Def.Source.Pages)
+			case def.Source.Pages != it.Pages:
+				fr.Error = fmt.Sprintf("label is for %d pages, the prediction for %d", it.Pages, def.Source.Pages)
 			default:
-				pred, perr := a.Def.PageRects()
+				pred, perr := def.PageRects()
 				if perr != nil {
 					fr.Error = perr.Error()
 					break
 				}
 				fr = bench.Score(it, d, pred)
 				fr.File = rel
-				if it.SHA256 != "" && it.SHA256 != a.Def.Source.SHA256 {
+				if it.SHA256 != "" && def.Source.SHA256 != "" && it.SHA256 != def.Source.SHA256 {
 					fr.Warnings = append(fr.Warnings, "label SHA-256 differs from the PDF")
 				}
 			}
@@ -432,4 +512,89 @@ func Bench(ctx context.Context, eng *pdf.Engine, req BenchRequest) (*bench.Repor
 	}
 	rep.Summarize()
 	return rep, nil
+}
+
+// detectPages renders every page and runs a page detector on each, filling
+// the clusters' per-page rectangles.
+func detectPages(ctx context.Context, eng *pdf.Engine, res *pipeline.Result, pd detect.PageDetector, opts detect.Options) error {
+	t0 := time.Now()
+	width := pd.RenderWidth()
+	jobs := make([]pdf.RenderJob, len(res.Doc.Pages))
+	for i, p := range res.Doc.Pages {
+		jobs[i] = pdf.RenderJob{Page: i, Width: width, Height: max(1, int(math.Round(float64(width)*p.Height/p.Width)))}
+	}
+	results := make([]detect.PageResult, len(jobs))
+	err := eng.Render(ctx, res.Doc, jobs, func(j pdf.RenderJob, g *image.Gray) error {
+		results[j.Page] = pd.DetectPage(g, opts) // distinct index per job, no lock needed
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	for _, c := range res.Clusters {
+		cand := detect.Candidate{Source: pd.Name(), PerPage: map[int][]geom.Ratios{}, Confidence: 1}
+		split := 0
+		for _, p := range c.Cluster.Pages {
+			r := results[p-1]
+			cand.PerPage[p] = r.Rects
+			cand.Confidence = math.Min(cand.Confidence, r.Confidence)
+			if len(r.Rects) > 1 {
+				split++
+			}
+		}
+		cand.Notes = fmt.Sprintf("detected page by page; %d of %d pages split into two", split, len(c.Cluster.Pages))
+		c.Candidate = cand
+	}
+	res.Timings.Detect = time.Since(t0)
+	return nil
+}
+
+// previewPages draws each page's rectangles on the page itself.
+func previewPages(ctx context.Context, eng *pdf.Engine, a *Analysis, src, outDir, pages string) ([]string, error) {
+	sel, err := pagerange.Parse(pages, len(a.Result.Doc.Pages))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInput, err)
+	}
+	rects, err := a.Def.PageRects()
+	if err != nil {
+		return nil, err
+	}
+	if outDir == "" {
+		outDir = strings.TrimSuffix(src, filepath.Ext(src)) + "_preview"
+	}
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrWrite, err)
+	}
+	base := strings.TrimSuffix(filepath.Base(src), filepath.Ext(src))
+	var jobs []pdf.RenderJob
+	for i, p := range a.Result.Doc.Pages {
+		if len(sel) > 0 && !sel[i+1] {
+			continue
+		}
+		const width = 900
+		jobs = append(jobs, pdf.RenderJob{Page: i, Width: width, Height: max(1, int(math.Round(width*p.Height/p.Width)))})
+	}
+	paths := make([]string, len(jobs))
+	idx := map[int]int{}
+	for k, j := range jobs {
+		idx[j.Page] = k
+	}
+	err = eng.Render(ctx, a.Result.Doc, jobs, func(j pdf.RenderJob, g *image.Gray) error {
+		rs := rects[j.Page+1]
+		if len(rs) == 0 {
+			rs = []geom.Ratios{{}}
+		}
+		p := filepath.Join(outDir, fmt.Sprintf("%s_page%03d.png", base, j.Page+1))
+		f, err := os.Create(p)
+		if err != nil {
+			return fmt.Errorf("%w: %w", ErrWrite, err)
+		}
+		defer f.Close()
+		if err := png.Encode(f, preview.Draw(g, rs)); err != nil {
+			return fmt.Errorf("%w: %w", ErrWrite, err)
+		}
+		paths[idx[j.Page]] = p
+		return nil
+	})
+	return paths, err
 }

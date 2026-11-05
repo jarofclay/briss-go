@@ -70,3 +70,24 @@ func TestLoadAndScore(t *testing.T) {
 		t.Fatalf("markdown:\n%s", md)
 	}
 }
+
+func TestLoadKeepsLabelOptions(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "a.pdf"), []byte("%PDF-1.4"), 0o644)
+	def := &cropdef.Definition{Version: cropdef.Version, Source: cropdef.Source{Path: "a.pdf", Pages: 1},
+		Options:       cropdef.Options{KeepHeaders: true},
+		PageOverrides: map[int][]cropdef.Rect{1: {{L: 0.1, B: 0.1, R: 0.1, T: 0.1}}}}
+	if err := def.Save(filepath.Join(dir, "a"+LabelSuffix)); err != nil {
+		t.Fatal(err)
+	}
+	items, _, err := Load(dir)
+	if err != nil || len(items) != 1 || !items[0].KeepHeaders {
+		t.Fatalf("label options not carried: %v %+v", err, items)
+	}
+	pred := t.TempDir()
+	def.Save(filepath.Join(pred, "a"+LabelSuffix))
+	got, err := Precomputed(pred, "a.pdf")
+	if err != nil || got.PageOverrides[1][0].L != 0.1 {
+		t.Fatalf("precomputed: %v %+v", err, got)
+	}
+}

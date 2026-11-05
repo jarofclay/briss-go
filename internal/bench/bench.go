@@ -5,7 +5,13 @@
 // next to it as NAME.crops.json. The label's rectangles are the ground truth:
 // cluster rectangles for every page of the cluster, page overrides for single
 // pages; an empty override means "this page must not be cropped". Pages
-// without any rectangle in the label are not scored.
+// without any rectangle in the label are not scored. The label's
+// keep_headers option says whether its rectangles include running headers,
+// footers and page numbers; detectors are run with the same setting.
+//
+// Predictions made elsewhere (by a script, another tool or an earlier run)
+// can be scored too: a detector named "dir:PATH" reads PATH/REL.crops.json
+// for the PDF at REL.pdf below the dataset, in the same format.
 package bench
 
 import (
@@ -33,11 +39,21 @@ const (
 
 // Item is one labelled PDF.
 type Item struct {
-	PDF    string
-	Labels string
-	Truth  map[int][]geom.Ratios // 1-based page -> rectangles
-	Pages  int
-	SHA256 string
+	PDF         string
+	Labels      string
+	Truth       map[int][]geom.Ratios // 1-based page -> rectangles
+	Pages       int
+	SHA256      string
+	KeepHeaders bool // the label includes running headers, footers and page numbers
+}
+
+// DirPrefix marks a detector name that reads precomputed predictions.
+const DirPrefix = "dir:"
+
+// Precomputed loads the prediction for the PDF at rel (relative to the
+// dataset) from a directory of crop definitions laid out like the dataset.
+func Precomputed(dir, rel string) (*cropdef.Definition, error) {
+	return cropdef.Load(filepath.Join(dir, strings.TrimSuffix(rel, filepath.Ext(rel))+LabelSuffix))
 }
 
 // Load finds labelled PDFs below dir. Unlabelled PDFs are returned separately.
@@ -62,7 +78,7 @@ func Load(dir string) (items []Item, unlabelled []string, err error) {
 		if terr != nil {
 			return fmt.Errorf("label %s: %w", lp, terr)
 		}
-		items = append(items, Item{PDF: p, Labels: lp, Truth: truth, Pages: def.Source.Pages, SHA256: def.Source.SHA256})
+		items = append(items, Item{PDF: p, Labels: lp, Truth: truth, Pages: def.Source.Pages, SHA256: def.Source.SHA256, KeepHeaders: def.Options.KeepHeaders})
 		return nil
 	})
 	sort.Slice(items, func(i, j int) bool { return items[i].PDF < items[j].PDF })

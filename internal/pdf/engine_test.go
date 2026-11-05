@@ -176,3 +176,19 @@ func TestDefaultWorkersBounds(t *testing.T) {
 		t.Fatalf("DefaultWorkers() = %d, want 1..4", n)
 	}
 }
+
+func TestPageKinds(t *testing.T) {
+	e := testEngine(t)
+	ctx := context.Background()
+	doc, err := e.Open(ctx, writeFixture(t, testpdf.Navigation()), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds, err := e.PageKinds(ctx, doc, []int{0, 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kinds) != 2 || kinds[0].TextObjects == 0 || kinds[0].Scanned() {
+		t.Fatalf("born-digital fixture page misread: %+v", kinds)
+	}
+}

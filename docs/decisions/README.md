@@ -15,3 +15,4 @@ what it costs, and what evidence would reopen it. Measurements are in
 | [0007](0007-secrets.md) | No credentials in the repository | Accepted 2026-11-05 |
 | [0008](0008-license-gpl.md) | Keep GPL-3.0 | Accepted 2026-11-04 |
 | [0009](0009-legacy-parity.md) | Keep the legacy tier bit-compatible, fix quirks elsewhere | Accepted 2026-11-05 |
+| [0010](0010-scan-tier-per-page.md) | The scan tier works page by page, from text lines | Accepted 2026-11-05 |

@@ -11,7 +11,7 @@ automatic bounding-box detection so users no longer have to draw every crop rect
 | Question | Decision | Why (short) |
 |---|---|---|
 | Language | **Go**, confirmed by a one-week spike with hard exit criteria (section 3.4). Rust is the fallback if the spike fails. | The hot path (PDF rasterization) runs in PDFium in either language. Go gives a cgo-free single binary via PDFium-in-WebAssembly, the most mature pure-Go PDF writer (pdfcpu), an official Anthropic SDK, and faster iteration. Rust wins only on statically linked local ML inference and raw pixel loops, neither of which dominates runtime here. |
-| PDF reading / rendering | **go-pdfium** (PDFium) in WebAssembly mode by default, cgo mode behind a build tag for maximum speed | Same API in both modes. WASM mode needs no system libraries, supports encrypted PDFs, exposes page-object bounds and text geometry for structure-based detection. |
+| PDF reading / rendering | **go-pdfium** (PDFium) in WebAssembly mode. The cgo backend stays behind a build tag as an optional flavour, not a 1.0 deliverable (Amended) | Same API in both modes. WASM mode needs no system libraries, supports encrypted PDFs, exposes page-object bounds and text geometry for structure-based detection. Spike: 10 to 15 ms per born-digital page and 53 to 124 ms per scanned page at 900 px; four WASM workers match native cgo on wall-clock. |
 | PDF writing | **pdfcpu** (pure Go, Apache-2.0) | Box editing, page-tree manipulation, outlines, named destinations, metadata, encryption, all in one dependency with no native code. |
 | GUI | **Fyne** with a custom crop-editor widget. Wails is the documented alternative if the 2-day GUI spike shows Fyne cannot reach the needed editor fidelity. | No system webview dependency on Linux, mature packaging, enough control for the rectangle editor. |
 | Detection | Four tiers behind one `Detector` interface: legacy port, structural (vector), classical CV for scans, local ML layout model, Claude vision. An `auto` policy escalates by document type and confidence. Every tier runs in the same evaluation harness. | Most born-digital PDFs are solved exactly and instantly by the structural tier. Scans need CV or ML. The VLM tier is reserved for semantic judgment calls and costs about a cent per cluster. |
@@ -21,6 +21,8 @@ automatic bounding-box detection so users no longer have to draw every crop rect
 
 Estimated effort for one engineer: 12 to 16 weeks to a 1.0 with GUI parity and all detection tiers.
 With two engineers (one on GUI, one on detection) the critical path is roughly 9 weeks.
+
+**Week-1 spike outcome (2026-11-04, details in `spike/RESULTS.md`):** Go confirmed. Rendering, the PDF writer and the editor widget passed their criteria on a synthetic corpus with exact labels. Fyne is accepted provisionally pending a desktop frame-rate check; section 7.3 gives the procedure and what to do when no display is available. The local layout-model gate is undecided because only a small CDLA model could be downloaded from the spike environment; section 8.7 explains the model-hub access that the evaluation needs. The Claude gate is untested for lack of an API key. The memo's amendments are folded into the sections below and marked "Amended".
 
 ---
 
@@ -135,6 +137,8 @@ Build throwaway programs, no architecture, and measure on the three PDFs in `src
 5. ONNX layout model (DocLayout-YOLO DocStructBench export) through onnxruntime_go on CPU: p50 under 400 ms per 1024 px page.
 6. Claude vision on 30 hand-labeled cluster overlays with the propose-and-choose prompt (section 8.4): mean IoU above 0.93 and zero clipped-content cases, latency p50 under 6 s.
 
+Outcome (Amended): 1 passes once the wazero compilation cache is used (warm start 92 to 130 ms; the very first run compiles for 4 to 6 s); 2 measured (2.3 to 2.7x per page, serialised, so no wall-clock win on four cores); 3 passes; 4 passes headlessly, the desktop frame-rate check is open; 5 passes on latency and fails on accuracy for the only model obtainable offline; 6 is blocked on an API key. Rust was not triggered. See `spike/RESULTS.md`.
+
 If 1 and 2 both fail, switch the plan to Rust with pdfium-render, egui, lopdf, and tract; the architecture in section 4 translates one to one.
 
 ---
@@ -218,7 +222,7 @@ open(path, password)
 Structural detection does not depend on the overlay, so for born-digital PDFs the CLI path can skip rendering entirely unless `--preview` is requested. Rendering is still done in the GUI because the user needs to see the overlay.
 
 ### 4.4 Concurrency
-- A pool of N PDFium instances (N = GOMAXPROCS, capped by a memory budget: each WASM instance holds its own linear memory). Pages are rendered through a channel; results feed the overlay accumulator for their cluster.
+- A pool of N PDFium instances (each WASM instance holds its own linear memory). Amended after the spike: N = min(GOMAXPROCS, 4) by default, 2 when the machine has 8 GB or less or when sampled pages are image-heavy (a decoded page image above 2 megapixels), and never more than one instance per 150 MB of free memory. Four workers peaked at 281 MB on two-up JPEG scans and 126 MB on a born-digital book; two workers stayed at 200 to 212 MB. Pages are rendered through a channel; results feed the overlay accumulator for their cluster.
 - Overlay is computed in streaming form (Welford mean and variance per pixel in `float32` slices), so at most one rendered page per worker is live at a time instead of 15 per cluster.
 - Detectors run per cluster in goroutines with a context for cancellation; the GUI updates a cluster panel as soon as its candidate arrives and shows a spinner on the others.
 - The Claude tier has a concurrency limit (default 2 in flight) and respects the SDK's retry behavior.
@@ -227,15 +231,15 @@ Structural detection does not depend on the overlay, so for born-digital PDFs th
 
 | Stage | Budget | How |
 |---|---|---|
-| Cold start to window | < 200 ms | No JVM; WASM module compiled lazily on a background goroutine while the start screen shows; compiled module cached by wazero |
+| Cold start to window | < 200 ms warm; the first run after an install or upgrade may spend 4 to 6 s compiling the PDFium module (Amended) | No JVM. The compiled module lives in a wazero compilation cache in the user cache directory (about 20 MB; measured 92 to 130 ms warm start). On the first run the compile happens on a background goroutine while the start screen shows a "preparing PDF engine" notice; the installer or a first-run step may precompile. |
 | Open and cluster | < 100 ms | Page boxes from PDFium `GetPageSizeByIndex` or pdfcpu, no page loads |
 | Structural detection, all clusters, born-digital | < 500 ms | Page objects for sampled pages only; no raster |
-| Overlays for up to 6 clusters x 15 pages at 900 px tall | < 2 s WASM, < 1 s cgo | Direct-size gray render, parallel workers, streaming overlay |
+| Overlays for up to 6 clusters x 15 pages at 900 px tall | < 2 s | Direct-size gray render, parallel workers, streaming overlay. Measured (Amended): 0.2 to 0.3 s born-digital, 0.6 to 1.0 s scans, with 4 WASM workers |
 | Legacy and CV detection per cluster | < 50 ms | Byte-slice loops, integral images |
 | Local ML per cluster (15 pages at 1024 px, CPU) | < 6 s, background | Only when selected or escalated; pages batched |
 | Claude per cluster | 2 to 6 s, background | One request per cluster, two to three images |
-| Write cropped output | < 1 s | Single pdfcpu pass, page dictionaries cloned, streams shared by reference |
-| Peak memory, 1000-page book | < 400 MB | Streaming overlay, pool cap, rendered pages released immediately |
+| Write cropped output | < 1 s | Single pdfcpu pass, page dictionaries cloned in place, streams shared by reference. Measured (Amended): 33 to 45 ms for 290 pages with 24 clones |
+| Peak memory, 1000-page book | < 400 MB | Streaming overlay, pool cap, rendered pages released immediately. Measured (Amended): 126 to 281 MB with 4 workers on the spike corpus; the pool cap in section 4.4 keeps image-heavy scans inside the budget |
 
 These budgets become CI benchmarks (`go test -bench` on `testdata/`) with a 20% regression gate.
 
@@ -245,21 +249,22 @@ These budgets become CI benchmarks (`go test -bench` on `testdata/`) with a 20% 
 
 ### 5.1 Reading and rendering: go-pdfium
 - Default build uses the WebAssembly backend (wazero), so `go build` works on any host with no toolchain beyond Go. The embedded module adds about 5 MB.
-- The `pdfium_cgo` build tag switches to the native library for release flavors where the extra speed matters (CI produces both; the download page offers "standard" and "native" builds).
+- The wazero compilation cache must be created with the same core features go-pdfium enables (`api.CoreFeaturesV2 | experimental.CoreFeaturesExceptionHandling`), otherwise the module fails to compile with "tag section not supported". The cache directory sits under the user cache dir and is keyed by the go-pdfium and wazero versions so an upgrade recompiles once (Amended).
+- The `pdfium_cgo` build tag switches to the native library. Amended after the spike: per page it is 2.3 to 2.7x faster, but go-pdfium's single-threaded cgo backend serialises calls, so four WASM workers match it on wall-clock on a four-core machine. It is an optional flavour for single-core machines and very large scans, built on demand rather than in the release matrix, and it needs PDFium headers that match the linked library (the `pdfium_experimental` tag failed to build against mismatched headers).
 - Encrypted PDFs: open with password; detect `BadPassword` to drive the GUI prompt exactly as the Java app does.
 - Rendering: `RenderPageInPixels`-style call at the target height in gray; never render at 300 DPI and downscale.
 - Structure: page object bounds (text, path, image, shading, form) and text-page character boxes feed the structural detector. Rotation and effective box are normalized once in `internal/geom`.
 
 ### 5.2 Writing: pdfcpu
-Replicating the Java two-pass approach:
-1. Read the source into a pdfcpu context (with password if needed).
-2. For each page with k rectangles, keep the page for rectangle 1 and insert k-1 clones of the page dictionary immediately after it. Clones reference the same `/Contents` and `/Resources` objects, so content is not duplicated and output size stays close to the source.
-3. Set `/CropBox` and `/MediaBox` on every output page to the rectangle, computed as in `RectangleHandler.calculateScaledRectangle` (smallest of media and crop box, ratios rotated by `/Rotate`).
-4. Shift outline destinations and named destinations by the number of pages inserted before them; the first clone keeps the original destination (same rule as `SimpleBookmark.shiftPageNumbers`).
-5. Copy the info dictionary and XMP metadata; preserve encryption if the source was encrypted (pdfcpu writes with the same permissions when configured).
+Amended after the spike (`spike/cropwrite`): the Java two-pass copy-then-stamp approach is not needed. The writer edits the page tree in place:
+1. Read and validate the source with pdfcpu (with the password when needed) and resolve every page dictionary before touching the tree, so page numbers stay those of the source.
+2. For each page with k rectangles, keep the page dictionary for rectangle 1 and insert k-1 shallow clones right after it in the parent's `/Kids`. Clones share `/Contents`, `/Resources` and `/Annots` by reference, so content is not duplicated. Bump `/Count` on every ancestor.
+3. Set `/CropBox` and `/MediaBox` on every output page to the rectangle, computed as in `RectangleHandler.calculateScaledRectangle` (smallest of media and crop box, ratios rotated by `/Rotate`); make `/Rotate` explicit on clones.
+4. Nothing to renumber: outlines, named destinations and link annotations reference page objects, and every original page object is still present as the first copy. That is exactly the semantics the Java app produced with `SimpleBookmark.shiftPageNumbers`.
+5. Keep the info dictionary and XMP metadata; an encrypted source stays encrypted with the same password.
 6. Write with object streams and xref streams enabled for size.
 
-Spike item 3 in section 3.4 validates this before any other crop work. If pdfcpu's high-level API fights the clone step, the fallback is pdfcpu's low-level `model.Context` API, which exposes the page tree directly.
+Measured on the spike corpus: 290 pages became 314 with 24 clones, zero text or box mismatches, 26 of 26 outline targets correct, output at 89% of the source size (the Java output was 101 to 113%), 33 to 45 ms end to end. Named destinations were not exercised because the generated corpus had none; phase 1 adds fixtures for them and for link annotations (section 10).
 
 ---
 
@@ -333,6 +338,13 @@ Crop definition JSON (v1) is the contract between CLI, GUI, and the dataset:
 ### 7.3 Why Fyne, and the fallback
 Fyne is pure Go apart from the OpenGL window layer, needs no system webview, has an official packager (`fyne package`), and its event model (Draggable, Hoverable, Cursorable, keyboard shortcuts) covers the editor. The risk is editor fidelity (custom cursors for diagonal resize, HiDPI image scaling, redraw cost), which spike item 4 checks. If Fyne fails, Wails v2 with a TypeScript canvas editor is the fallback: better editor ergonomics and a free path to a `briss serve` browser mode, at the price of a WebKitGTK dependency on Linux and WebView2 on Windows.
 
+**Frame-rate check, and what to do without one (Amended).** The spike editor passes its headless test and ships with a measurement hook: with `BRISS_FRAME_STATS=1` it prints the median and 95th percentile of the interval between redraws every 60 redraws while you drag. Procedure, in order of preference:
+1. Any desktop, any display: run `go run .` in `spike/gui` (later the phase-3 editor) with `BRISS_FRAME_STATS=1`, drag and resize a rectangle for ten seconds at the display's native resolution and again at 200% scaling. Pass: p95 under 16 ms. A 4K display is not required for a meaningful number. The editor draws a 900 px image and a few dozen rectangles, so GPU cost is dominated by object count, not display pixels; 4K only adds the one-time image upload.
+2. No desktop at all: Fyne is provisionally accepted and phase 3 starts with the hook in place. The first build that someone with a screen can run (end of phase-3 week 1) is the decision point; that person runs step 1 and logs the result in `docs/decisions/`.
+3. Step 1 fails on a current laptop: try the two cheap fixes first (draw the image through `canvas.Raster` instead of `canvas.Image`, and rebuild only the changed rectangle's canvas objects instead of the whole list). If p95 stays above 16 ms, switch the editor to Wails. The core packages are untouched because the GUI only consumes crop definitions and overlay images.
+
+Worked example of the worst case: nobody on the project has a display until phase 5. Then 1.0 ships the Fyne editor with the hook enabled behind the environment variable, the release notes ask users on 4K displays to report the printed numbers, and the Wails port is a budgeted post-1.0 item triggered by those reports rather than by a measurement the team could not take.
+
 ---
 
 ## 8. AI-assisted bounding-box detection
@@ -355,7 +367,7 @@ The Java auto-crop is a projection-profile heuristic that cannot distinguish a h
 | T0 | `legacy` | overlay | Port of `ImageFinderUtil` and `CropFinder` | Bit-compatible with Java; deterministic | Keeps headers; fooled by noise | free, < 10 ms |
 | T1 | `structural` | page objects, text lines | Union of object bounds per page; running header/footer detection by cross-page repetition of text-line position and normalized text (same y within 2 pt on more than 60% of the cluster, short text, or digit/roman-numeral pattern at the top or bottom band); optional margin-note detection (narrow text column outside the main column, user choice); per-page boxes then cluster harmonization (union, or 95th percentile when `--per-page` is off and outliers exist) | Exact to the point, no rendering, instant, explainable | Only born-digital PDFs; fails on scans (one image object) and on PDFs with full-page background images or invisible objects (mitigated by ignoring objects outside the media box, white fills, and zero-alpha objects) | free, < 5 ms per page |
 | T2 | `cv` | rendered pages (gray) | Sauvola adaptive threshold, border-noise removal (dark connected components touching the edge), despeckle, run-length smoothing to form line and block components, projection profiles with valley detection for two-up and column splits, header/footer by repetition of line positions across sampled pages, text-line height statistics to tell page numbers from body text | Offline, fast, good on clean scans | Struggles with marginalia, figures touching the margin, heavily skewed scans, decorative borders | free, 20 to 60 ms per page |
-| T3 | `ml` | rendered pages (RGB, 640 to 1024 px) | ONNX layout detector; crop = union of boxes in keep-classes, excluding header, footer, page-number and (optionally) aside classes; per-page then harmonized. Candidates: PP-DocLayout_plus-L (Apache-2.0, RT-DETR-L, has header, footer, number, aside_text classes), DocLayout-YOLO DocStructBench weights (Apache-2.0 per the model cards; its `abandon` class covers headers, footers and page numbers; the AGPL `doclayout_yolo` runtime is not shipped because inference goes through ONNX Runtime), docling-layout-heron (Apache-2.0, RT-DETRv2, about 172 MB) | Handles scans, mixed layouts, figures, tables; semantic classes map directly onto the crop policy | Needs ONNX Runtime beside the binary (15 to 20 MB) and a model download (40 to 170 MB); CPU latency hundreds of ms per page; boxes are at 640 to 1024 px resolution so edges need snapping | free after download; 150 to 800 ms per page CPU |
+| T3 | `ml` | rendered pages (RGB, 640 to 1024 px) | ONNX layout detector; crop = union of boxes in keep-classes, excluding header, footer, page-number and (optionally) aside classes; per-page then harmonized. Candidates: PP-DocLayout_plus-L (Apache-2.0, RT-DETR-L, has header, footer, number, aside_text classes), DocLayout-YOLO DocStructBench weights (Apache-2.0 per the model cards; its `abandon` class covers headers, footers and page numbers; the AGPL `doclayout_yolo` runtime is not shipped because inference goes through ONNX Runtime), docling-layout-heron (Apache-2.0, RT-DETRv2, about 172 MB) | Handles scans, mixed layouts, figures, tables; semantic classes map directly onto the crop policy | Needs ONNX Runtime beside the binary (15 to 20 MB) and a model download (40 to 170 MB); CPU latency hundreds of ms per page; boxes are at 640 to 1024 px resolution so edges need snapping | free after download; measured 53 to 64 ms per page for a small PicoDet model, estimated 150 to 800 ms for the RT-DETR candidates, on CPU (Amended) |
 | T4 | `claude` | overlay plus two representative pages | Propose-and-choose (section 8.4): the app computes candidate rectangles from T1 to T3 and from simple variants (with and without header band, with and without margin notes, column splits), draws them numbered on the images, and asks Claude to pick and optionally adjust; structured JSON output; result snapped to projection-profile edges | Best at semantic judgment (what is a margin note, which band is a header, is this a two-up scan); explains itself; one call per cluster | Network, API key, cost, privacy (page images leave the machine), nondeterminism, coordinate precision is only moderate when asked to regress raw coordinates (hence propose-and-choose) | about 1 to 2 cents per cluster on Opus 5.5; 2 to 6 s |
 
 `auto` policy:
@@ -395,6 +407,7 @@ Recommendation: structural plus CV as the always-on default; local ML as an opti
 Dataset (target 600 to 1,000 labeled cluster images, grown over time):
 - **DocLayNet** (CC-BY-4.0, about 80k pages with page-header and page-footer classes): ground-truth crop boxes are derived automatically as the union of all non-header, non-footer boxes, with and without the header band. This gives tens of thousands of labeled born-digital and scanned pages across financial, scientific, legal, manual, and patent documents at no labeling cost.
 - **Public-domain scans** (Internet Archive, Project Gutenberg scans, HathiTrust public domain): 150 to 300 clusters hand-labeled in the new GUI, covering two-up scans, skew, black borders, marginalia, and bleed-through.
+- **Synthetic generator** (`spike/tools/gen_corpus.py`, Amended): a 290-page book with running headers, page numbers, figures, two-column and margin-note chapters, landscape pages and outlines, plus 118 single-page and 59 two-up scanned-looking pages, all with exact body boxes. It is the first benchmark set and the CI smoke set because its labels are free and exact. It does not replace real scans.
 - **Born-digital samples**: arXiv papers, ebook exports, slides, magazines, sheet music, and the three PDFs already in `testdata/`.
 - **User contributions**: the opt-in "contribute corrections" export (crop definition plus overlay PNG, no text), curated before inclusion.
 
@@ -410,19 +423,26 @@ Harness: `briss bench` reads the dataset manifest, runs the selected detectors, 
 
 ### 8.6 Decision gates for the AI tier
 - Ship T1 and T2 in 1.0 unconditionally.
-- Ship T3 if a candidate model reaches at least 85% acceptance on scans with a clipped-content rate below 1%, under 500 ms per page on CPU, and a license in the Apache/MIT family.
+- Ship T3 if a candidate model reaches at least 85% acceptance on scans with a clipped-content rate below 1%, under 500 ms per page on CPU, and a license in the Apache/MIT family. Measured so far (Amended): the CDLA PicoDet model bundled with the rapid_layout wheel reached 73 to 83% acceptance with ink snapping on the synthetic corpus and fails the gate; the decision waits for the candidates in section 8.7. Ink-edge snapping stays in the post-processing of every tier because it raised scan acceptance from 29 to 33 of 40 at no cost.
 - Ship T4 if the Claude spike reaches at least 90% acceptance on the "hard" subset (clusters where T1 to T3 disagree) with zero clipped-content cases, and if cost per cluster stays under 2 cents. Otherwise keep it as an experimental flag.
 - Revisit "Jev" or any other named vendor once identified: implement a `Detector`, run the same bench, compare on the same table.
 
 ---
 
+### 8.7 Evaluating the candidate layout models (needs model-hub access)
+The candidate weights are not on any package index. They live on model hubs: PP-DocLayout_plus-L on Hugging Face under `PaddlePaddle/PP-DocLayout_plus-L` (PaddlePaddle inference format) and, pre-converted to ONNX, in RapidAI's RapidLayout release on ModelScope (`pp_doc_layoutv2`, `pp_doc_layoutv3`); DocLayout-YOLO DocStructBench on Hugging Face (`juliozhao/DocLayout-YOLO-DocStructBench`, PyTorch) and as ONNX on ModelScope (`doclayout_docstructbench`) and in community Hugging Face repositories; docling-layout-heron on Hugging Face (`ds4sd/docling-layout-heron`, safetensors). The cloud session used for the spike reaches PyPI and the Go module proxy but not huggingface.co or modelscope.cn (both are denied by the environment's network policy; the harness-side fetcher cannot resolve them either), so the evaluation has to run on a machine that can: a developer laptop, a CI job with egress to those hosts, or this cloud environment after `huggingface.co` and `www.modelscope.cn` are added under Allowed domains in the environment's network settings (Network access, Limited level, with package managers still allowed). Steps:
+1. `pip install rapid-layout onnxruntime pypdfium2 pillow numpy`, then generate the corpus with `python spike/tools/gen_corpus.py spike/testdata`.
+2. Run `python spike/tools/onnx_eval.py spike/testdata 40 --model pp_doc_layoutv2` and again with `--model doclayout_docstructbench`. On first use rapid_layout downloads the ONNX file (tens to a few hundred MB) from ModelScope into its cache; `--path file.onnx` points at a file obtained another way. The script excludes the model's header, footer and page-number classes (PP-DocLayout: `header`, `footer`, `number`, `header_image`, `footer_image`; DocLayout-YOLO: `abandon`) and reports latency, IoU, clipping and acceptance with and without ink snapping.
+3. For PP-DocLayout_plus-L itself (RT-DETR-L), export the Hugging Face PaddlePaddle checkpoint with `paddle2onnx` and pass the result with `--path`. The heron model needs a small adapter because its RT-DETRv2 output heads differ from the handlers rapid_layout ships.
+4. Record the numbers in `spike/RESULTS.md` and apply the gate from section 8.6, with the weight license and checksum recorded next to the result.
+
 ## 9. Roadmap
 
 | Phase | Weeks | Deliverables | Exit criteria |
 |---|---|---|---|
-| 0. Spike | 1 | The six spike programs from section 3.4, a one-page results memo, Go-or-Rust decision, Fyne-or-Wails decision | All numbers recorded; decisions logged in `docs/decisions/` |
-| 1. Core library | 2 to 3 | `internal/pdf`, `cluster`, `overlay`, `geom`, `detect/legacy`, `crop`, `cropdef`; Java tree moved to `legacy-java/`; golden tests comparing cluster membership, overlay checksums (tolerance), legacy rectangles (within 0.5%), and output page boxes against the Java build on the same PDFs | `go test ./...` green; golden diffs within tolerance on all `testdata/` PDFs including the encrypted one |
-| 2. CLI | 1 to 2 | `briss crop`, `detect`, `preview`, `apply`, legacy flags, JSON crop definitions, goreleaser config, CI matrix (Linux, macOS, Windows; WASM and cgo flavors) | Release 0.1 with CLI only; legacy flag behavior byte-for-byte identical on the sample PDFs |
+| 0. Spike | 1 | Done 2026-11-04 (Amended): six spike programs under `spike/`, corpus generator, `spike/RESULTS.md` | Go confirmed; Fyne provisional (section 7.3); layout-model and Claude gates still open (sections 8.6, 8.7) |
+| 1. Core library | 2 to 3 | `internal/pdf`, `cluster`, `overlay`, `geom`, `detect/legacy`, `crop`, `cropdef`; Java tree moved to `legacy-java/`; golden tests comparing cluster membership, overlay checksums (tolerance), legacy rectangles (within 0.5%), and output page boxes against the Java build on the same PDFs; fixtures with outlines, named destinations and link annotations for the in-place page-cloning writer (Amended) | `go test ./...` green; golden diffs within tolerance on all `testdata/` PDFs including the encrypted one; outline, named-destination and link targets verified on the cloned pages |
+| 2. CLI | 1 to 2 | `briss crop`, `detect`, `preview`, `apply`, legacy flags, JSON crop definitions, goreleaser config, CI matrix (Linux, macOS, Windows; WASM flavour only, cgo optional later, Amended) | Release 0.1 with CLI only; legacy flag behavior byte-for-byte identical on the sample PDFs |
 | 3. GUI parity | 3 to 4 | Fyne app with every item in section 7.1; packaging via `fyne package`; screenshots in README | Manual test script covering the Java feature list passes on all three platforms |
 | 4. Detection | 3 to 4 (overlaps phase 3 with two engineers) | T1 structural, T2 CV, bench harness, DocLayNet importer, hand-labeled scan set, T3 ONNX detector and `briss model pull`, T4 Claude detector, `auto` policy, GUI integration (Detect buttons, review strip, page strip) | Bench report published; gates in section 8.6 evaluated; `auto` enabled by default |
 | 5. Hardening and 1.0 | 1 to 2 | Fuzzing of the PDF and JSON inputs, large-file memory tests, crash reporting (local log only), docs, migration notes, 1.0 release | Performance budgets met in CI; no P1 bugs open |
@@ -443,7 +463,7 @@ Later options, not scheduled: `briss serve` local web UI, batch folder processin
 ---
 
 ## 11. Packaging and distribution
-- goreleaser builds: `briss` (WASM PDFium, cgo-free) for linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64; `briss-native` (cgo PDFium) for the same targets on dedicated runners. GUI builds need cgo for the window layer on every platform, so the CI matrix uses native runners rather than cross-compilation.
+- goreleaser builds: `briss` (WASM PDFium, cgo-free) for linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64. A `briss-native` cgo flavour is not part of 1.0 (Amended); the build tag stays so it can be added for single-core machines if users ask. GUI builds need cgo for the window layer on every platform, so the CI matrix uses native runners rather than cross-compilation.
 - Local ML support ships as an optional download (`briss model pull`), which fetches the ONNX Runtime shared library for the platform and the chosen model into the user cache directory with checksum verification. The core binary never depends on it.
 - macOS: signed and notarized `.app` plus a bare CLI binary. Windows: zip and an MSI via WiX. Linux: tarball, AppImage, and a Flatpak manifest.
 - Homebrew tap and Scoop manifest for the CLI.
@@ -462,9 +482,9 @@ Later options, not scheduled: `briss serve` local web UI, batch folder processin
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| WASM PDFium too slow or memory-hungry on large books | Misses the budget | cgo flavor; cap pool size by memory; render only sampled pages; spike decides early |
-| Page duplication in pdfcpu breaks outlines, named destinations, or viewers | Wrong bookmarks, unreadable files | Spike item 3; cross-viewer test corpus; fallback to low-level context API; keep the Java golden outputs for comparison |
-| Fyne editor fidelity (cursors, HiDPI, redraw cost) | Worse UX than the Swing app | Spike item 4; Wails fallback with the same core |
+| WASM PDFium too slow or memory-hungry on large books | Misses the budget | Measured inside the budget in the spike (Amended). Remaining risks: the first-run compile (4 to 6 s, mitigated by the compilation cache and background compile) and image-heavy scans with four workers (mitigated by the pool cap in section 4.4); cgo flavour as a last resort |
+| Page duplication in pdfcpu breaks outlines, named destinations, or viewers | Wrong bookmarks, unreadable files | In-place cloning validated in the spike for outlines, boxes, metadata and encryption (Amended); named destinations and link annotations still need fixtures; cross-viewer test corpus; keep the Java golden outputs for comparison |
+| Fyne editor fidelity (cursors, HiDPI, redraw cost) | Worse UX than the Swing app | Widget and custom diagonal cursors validated headlessly; frame-rate procedure and no-display fallback in section 7.3; Wails fallback with the same core |
 | ML runtime distribution on three platforms | Support burden | Optional download, checksummed, never required; WASM-under-wazero escape hatch |
 | Model license drift (weights relicensed, AGPL loaders) | Legal exposure | Pin checksums; record licenses; only Apache or MIT weights; no AGPL runtimes |
 | VLM gives imprecise coordinates or clips text | Users lose trust in Detect | Propose-and-choose plus snapping; clipped-content rate is a hard gate; review strip always shows the result before cropping |
@@ -478,7 +498,9 @@ Later options, not scheduled: `briss serve` local web UI, batch folder processin
 ## 14. Open questions for the project owner
 1. **"Jev"**: the brief lists "Jev, Claude, or other" as candidate tooling. No tool, model, or vendor by that name could be identified. If it is a specific product (or a typo for one), name it and it gets a `Detector` adapter and a row in the bench report.
 2. **Second hosted vendor**: should the harness also measure an OpenAI or Google vision model for comparison, at the cost of two more API integrations, or is Claude the only hosted candidate?
-3. **cgo release flavor**: is maintaining a second, native-PDFium build worth it, or is the WASM build enough if it meets the budget?
+3. **cgo release flavor**: answered by the spike (Amended): the WASM build meets the budget and four workers match native cgo on wall-clock, so the cgo flavour is optional and not shipped in 1.0.
 4. **Per-page cropping default**: should scanned documents default to per-page rectangles (better fit, varying page sizes in the output) or keep the cluster-wide rectangle (stable geometry, as Briss has always done)?
 5. **Dataset contributions**: is an opt-in export of anonymized crop definitions and overlay images acceptable for building the public benchmark?
 6. **Java tree**: keep it in `legacy-java/` in this repository until parity, or move it to a `java` branch and reference it from CI by commit?
+7. **Model-hub access** (Amended): who runs the layout-model evaluation in section 8.7, and on which machine with access to huggingface.co or modelscope.cn?
+8. **Display for the frame-rate check** (Amended): does anyone on the team have a desktop, at any resolution, to run the section 7.3 procedure during phase 3? If not, the no-display path in 7.3 applies.

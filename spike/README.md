@@ -10,7 +10,7 @@ future application module.
 | `render/` | 1 and 2: go-pdfium rendering benchmark, WebAssembly and cgo backends | `go build -o render . && ./render -pdf ../testdata/book300.pdf -workers 4 -out ../testdata/overlays -dump-samples 2` ; cgo: `PKG_CONFIG_PATH=<dir with pdfium.pc> go build -tags pdfium_cgo` ; set `BRISS_WAZERO_CACHE=<dir>` to cache the compiled module |
 | `cropwrite/` | 3: pdfcpu in-place page cloning and box writing | `go build -o cropwrite . && ./cropwrite -in ../testdata/book300.pdf -out /tmp/out.pdf -labels ../testdata/labels.json` then `python ../tools/verify_crop.py ...` |
 | `gui/` | 4: Fyne crop-editor widget | `go run . ../testdata/overlays/book300_c00_odd_612x792_p1.png` on a desktop; `go test -run TestEditorHeadless -v .` renders a screenshot headlessly |
-| `tools/onnx_eval.py` | 5: layout-model latency and crop accuracy (CDLA PicoDet bundled with the rapid_layout wheel) | `python tools/onnx_eval.py testdata 40` (needs onnxruntime, rapid-layout) |
+| `tools/onnx_eval.py` | 5: layout-model latency and crop accuracy (CDLA PicoDet bundled with the rapid_layout wheel; other models via `--model pp_doc_layoutv2`, `--model doclayout_docstructbench` or `--path file.onnx`, which need access to huggingface.co or modelscope.cn) | `python tools/onnx_eval.py testdata 40 [--model TYPE]` (needs onnxruntime, rapid-layout) |
 | `claude/` | 6: propose-and-choose harness for Claude | `go build -o claude-spike . && ./claude-spike -mode dry` ; `-mode live` needs `ANTHROPIC_API_KEY` |
 
 Native PDFium for the cgo build came from the `pypdfium2` wheel (`pypdfium2_raw/libpdfium.so`)

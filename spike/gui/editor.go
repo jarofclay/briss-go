@@ -4,6 +4,10 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"os"
+	"sort"
+	"sync"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -187,7 +191,7 @@ func (e *CropEditor) TappedSecondary(ev *fyne.PointEvent) {
 
 // --- desktop.Hoverable + desktop.Cursorable
 func (e *CropEditor) MouseIn(ev *desktop.MouseEvent) { e.MouseMoved(ev) }
-func (e *CropEditor) MouseOut()                     { e.cursor = desktop.DefaultCursor }
+func (e *CropEditor) MouseOut()                      { e.cursor = desktop.DefaultCursor }
 func (e *CropEditor) MouseMoved(ev *desktop.MouseEvent) {
 	i, h := e.hitTest(ev.Position)
 	switch {
@@ -298,8 +302,44 @@ var (
 	colHandle   = color.NRGBA{R: 255, G: 255, B: 255, A: 255}
 )
 
+// Frame statistics for the desktop frame-rate check (PLAN.md section 7.3):
+// with BRISS_FRAME_STATS=1 the editor prints the median and 95th percentile of
+// the interval between renderer rebuilds every 60 rebuilds. Dragging rebuilds
+// on every pointer event, so the interval approximates the frame interval.
+var frameStats struct {
+	sync.Mutex
+	enabled bool
+	last    time.Time
+	samples []time.Duration
+}
+
+func init() { frameStats.enabled = os.Getenv("BRISS_FRAME_STATS") != "" }
+
+func recordFrame() {
+	if !frameStats.enabled {
+		return
+	}
+	frameStats.Lock()
+	defer frameStats.Unlock()
+	now := time.Now()
+	if !frameStats.last.IsZero() {
+		if d := now.Sub(frameStats.last); d < time.Second { // ignore idle gaps
+			frameStats.samples = append(frameStats.samples, d)
+		}
+	}
+	frameStats.last = now
+	if len(frameStats.samples) >= 60 {
+		sort.Slice(frameStats.samples, func(i, j int) bool { return frameStats.samples[i] < frameStats.samples[j] })
+		p50 := frameStats.samples[len(frameStats.samples)/2]
+		p95 := frameStats.samples[len(frameStats.samples)*95/100]
+		fmt.Printf("frame interval over %d redraws: p50=%v p95=%v (%s)\n", len(frameStats.samples), p50.Round(100*time.Microsecond), p95.Round(100*time.Microsecond), map[bool]string{true: "PASS <16ms", false: "FAIL >=16ms"}[p95 < 16*time.Millisecond])
+		frameStats.samples = frameStats.samples[:0]
+	}
+}
+
 func (r *editorRenderer) rebuild() {
 	r.e.frameCount++
+	recordFrame()
 	objs := []fyne.CanvasObject{r.img}
 	if g := r.e.ghost; g != nil && r.e.mode == modeNone {
 		gr := canvas.NewRectangle(color.Transparent)

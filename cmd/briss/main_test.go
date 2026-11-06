@@ -315,7 +315,7 @@ func TestExitCodes(t *testing.T) {
 		{[]string{"crop", src, "--exclude", "999"}, exitInput},
 		{[]string{"crop", src, "--margin", "3furlongs"}, exitInput},
 		{[]string{"crop", src, "--detector", "claude"}, exitDetection},
-		{[]string{"crop", src, "-o", "/proc/no/such/dir/out.pdf"}, exitWriteError},
+		{[]string{"crop", src, "-o", filepath.Join(src, "under-a-file", "out.pdf")}, exitWriteError}, // a folder inside a file cannot be made on any system
 		{[]string{"--version"}, exitOK},
 		{[]string{"version"}, exitOK},
 		{[]string{"-s"}, exitUsage},

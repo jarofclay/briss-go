@@ -129,7 +129,7 @@ func SplitColumnProfile(p Profile, r geom.Ratios) []geom.Ratios {
 	ratio := splitRatio(sdOfDerivation(p.Cols), len(p.Cols))
 	l, b, rr, t := float32(r.L), float32(r.B), float32(r.R), float32(r.T)
 	width := 1 - rr - l
-	divider := l + ratio*width
+	divider := l + float32(ratio*width) // the conversion stops arm64 fusing this into one rounding, which Java does not do
 	return []geom.Ratios{
 		f32(l, b, 1-divider, t),
 		f32(divider, b, rr, t),
@@ -149,7 +149,7 @@ func SplitRowProfile(p Profile, r geom.Ratios) []geom.Ratios {
 	ratio := splitRatio(sdOfDerivation(p.Rows), len(p.Cols))
 	l, b, rr, t := float32(r.L), float32(r.B), float32(r.R), float32(r.T)
 	height := 1 - b - t
-	divider := t + ratio*height
+	divider := t + float32(ratio*height) // as above
 	return []geom.Ratios{
 		f32(l, 1-divider-rowOverlapRatio, rr, t),
 		f32(l, b, rr, divider-rowOverlapRatio),

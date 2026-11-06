@@ -1,6 +1,7 @@
 # 0004 Build the GUI with Fyne
 
-Status: provisional 2026-11-05 (PLAN.md section 7.3).
+Status: provisional 2026-11-05 (PLAN.md section 7.3); in use since 2026-11-06 for the app in
+`gui/` (decision 0011), which runs under Mesa llvmpipe and the Fyne test driver.
 
 **Decision.** Fyne with a custom crop-editor widget; Wails is the fallback.
 

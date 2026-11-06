@@ -5,8 +5,11 @@ the printed area of each page, cuts away the margins, and can split two-page sca
 two-column layouts into separate pages.
 
 This branch holds **briss-go**, a rewrite of the Java Briss 2.0 in Go with automatic
-crop detection. It is a command-line program for now; the graphical editor comes later.
-The Java version is still here, in [legacy-java/](legacy-java/) (see the end of this page).
+crop detection: a desktop app (drop PDFs in, get them cropped) and a command-line
+program. The Java version is still here, in [legacy-java/](legacy-java/) (see the end of
+this page).
+
+![The Briss desktop app](docs/img/gui-jobs.png)
 
 > **Work in progress.** [HANDOFF.md](HANDOFF.md) has the current state and next steps,
 > [PLAN.md](PLAN.md) the full plan, [docs/decisions](docs/decisions/README.md) the
@@ -15,6 +18,7 @@ The Java version is still here, in [legacy-java/](legacy-java/) (see the end of 
 ## Contents
 
 - [What it can do](#what-it-can-do)
+- [The desktop app](#the-desktop-app)
 - [Download and build](#download-and-build)
 - [Crop your first PDF](#crop-your-first-pdf)
 - [Commands](#commands)
@@ -38,17 +42,94 @@ The Java version is still here, in [legacy-java/](legacy-java/) (see the end of 
   halves; one output page per rectangle, in reading order.
 - **Keeps the document working**: outlines (bookmarks), links, named destinations and
   encryption survive cropping and splitting.
-- **Review and correct before writing**: save the rectangles to a JSON file, look at them
-  drawn on the pages, edit the numbers, then apply the file.
+- **Straighten** (`--straighten`): scanned pages that lean are turned level, page by
+  page, without re-encoding the scan.
+- **Same page size** (`--normalize`): every output page of a kind gets the same size,
+  so an e-reader shows them all at the same scale.
+- **Selectable text** (`--ocr`): scanned pages get an invisible text layer you can
+  search, select and copy, read by [Tesseract](https://tesseract-ocr.github.io)
+  (installed separately).
+- **Review and correct before writing**: in the app's preview, drag the crop boxes; on
+  the command line, save the rectangles to a JSON file, look at them drawn on the
+  pages, edit the numbers, then apply the file.
 - **Benchmark detectors** against labelled PDFs (`briss bench`).
 - **The Briss 2.0 command line still works**: `briss -s in.pdf -d out.pdf --split-col`.
 - **Fast and self-contained**: a 290-page book is cropped in about half a second; one
   file runs on Linux, macOS and Windows with no Java and no libraries to install
   (the PDF engine, PDFium, runs as WebAssembly inside the program).
 
-Not there yet: the graphical editor, the detector for born-digital PDFs that reads the
-page text, and the optional AI detectors (a local layout model and Claude). Asking for
-them (`--detector structural`, `ml` or `claude`) stops with exit code 3.
+Not there yet: the detector for born-digital PDFs that reads the page text, and the
+optional AI detectors (a local layout model and Claude). Asking for them
+(`--detector structural`, `ml` or `claude`) stops with exit code 3.
+
+## The desktop app
+
+Drop PDFs (or folders of PDFs) on the window, or click it to choose one. Each file is
+cropped straight away and saved next to the original as `NAME_cropped.pdf`; the arrow
+button on a finished file opens it.
+
+| Start | Options |
+|---|---|
+| ![Drop zone](docs/img/gui-start.png) | ![Options panel](docs/img/gui-options.png) |
+
+The sliders button at the top right opens the options (remembered between runs):
+
+| Option | Default | What it does |
+|---|---|---|
+| Mode | Auto | **Auto** crops and saves at once. **Preview** opens a preview window first and saves when you press Save. **Preview only** opens the preview and saves nothing. |
+| Margin | 6 pt | Extra room around the content of every page |
+| Same page size | on | Every output page of a kind (left pages, right pages, ...) gets the size of the largest |
+| Selectable text (OCR) | on | Adds a searchable text layer to scanned pages. Needs Tesseract; without it the switch is greyed out with a link to the installer |
+| Straighten | on | Turns leaning scanned pages level |
+| Keep headers & page numbers | on | Keeps running headers, footers and page numbers inside the crop |
+
+![Preview window](docs/img/gui-preview.png)
+
+The preview shows each sheet with its crop boxes (what is kept is bright) and, on the
+right, the pages as they will come out, straightened and cropped. Drag a box's edge
+or corner to resize it, drag inside to move it, drag on empty space to draw a new one,
+right-click a box to remove it; the circular arrow puts the page's boxes back as
+detected. Arrow keys, Page Up/Down or the buttons at the bottom turn the pages; Escape
+closes the window.
+
+### Getting the app
+
+**Ready-made downloads.** Every push to this branch builds the app for Linux, macOS
+(Apple silicon and Intel) and Windows: on GitHub open **Actions**, then **GUI**, then the
+newest run, and download the file for your system under **Artifacts** (you need to be
+signed in). On a fork, Actions may first have to be switched on in the **Actions** tab.
+
+- **macOS**: unzip and drag **Briss.app** to Applications. The app is not signed yet, so
+  the first time right-click it and choose **Open**, then **Open** again.
+- **Windows**: run **Briss.exe**. SmartScreen may warn about an unknown publisher; choose
+  **More info**, **Run anyway**.
+- **Linux**: unpack and run `Briss/briss-gui`.
+
+**For OCR**, install Tesseract once: `brew install tesseract` on macOS, the installer
+from [UB Mannheim](https://github.com/UB-Mannheim/tesseract/wiki) on Windows (keep the
+default folder), or `sudo apt install tesseract-ocr` on Debian and Ubuntu. Briss finds it
+on its own; other languages than English need their Tesseract language packs.
+
+**Building it yourself** needs the same Git and Go as below plus a C compiler, because
+the app draws its window with OpenGL through [Fyne](https://fyne.io):
+
+- macOS: `xcode-select --install` (once);
+- Linux (Debian, Ubuntu): `sudo apt install gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev`;
+- Windows: a 64-bit GCC such as [MSYS2](https://www.msys2.org)'s `mingw-w64-x86_64-gcc`,
+  on the `PATH` (the ready-made download avoids this).
+
+Then, from the `briss-go` folder:
+
+```bash
+cd gui
+```
+
+```bash
+go build -o briss-gui .
+```
+
+and start it with `./briss-gui` (on Windows `go build -ldflags "-H windowsgui" -o Briss.exe .`
+and double-click `Briss.exe`). The first build takes a few minutes.
 
 ## Download and build
 
@@ -87,7 +168,7 @@ itself the first time, so an older version printed here is fine.
 ### 2. Download the code
 
 ```bash
-git clone --branch claude/happy-cray-vejte7 https://github.com/jarofclay/briss-go.git
+git clone --branch claude/gui https://github.com/jarofclay/briss-go.git
 ```
 
 ```bash
@@ -96,7 +177,7 @@ cd briss-go
 
 This makes a `briss-go` folder in the folder your terminal is in (your home folder
 unless you moved). Without Git: on the repository's GitHub page pick the branch
-`claude/happy-cray-vejte7` in the branch menu, then **Code**, **Download ZIP**, unpack
+`claude/gui` in the branch menu, then **Code**, **Download ZIP**, unpack
 it, and `cd` into the unpacked folder.
 
 ### 3. Build
@@ -153,6 +234,7 @@ with spaces need quotes: `./briss crop "My Book.pdf"`. A few variations:
 ./briss crop mybook.pdf -o small.pdf --margin 3pt     # leave 3 points of margin
 ./briss crop mybook.pdf --split-col                   # two-column pages into two pages each
 ./briss crop mybook.pdf --dry-run                     # show what would be cut, write nothing
+./briss crop scan.pdf --straighten --normalize --ocr  # what the desktop app does by default
 ```
 
 To look before you crop, draw the rectangles on images:
@@ -183,6 +265,9 @@ each rectangle is numbered in output order (1 = left page of a two-page sheet).
 | `--keep-headers` | Keep running headers, footers and page numbers |
 | `--margin 3pt` | Extra margin around the content: `pt`, `mm`, `in` or `%` |
 | `--split-col`, `--split-row` | Split every rectangle into two columns or two rows |
+| `--straighten` | Turn leaning scanned pages level |
+| `--normalize` | Give every output page of a kind the same size |
+| `--ocr`, `--ocr-lang eng+deu` | Add a selectable text layer to scanned pages (needs Tesseract) |
 | `--exclude "1-3;10"` | Pages kept out of the grouping and cropped on their own (covers, plates) |
 | `-o FILE` | Output PDF or folder (default `NAME_cropped.pdf`) |
 | `--save-crops FILE` | Also save the rectangles as a crop definition |
@@ -350,20 +435,24 @@ go test ./...
 
 | Path | Contents |
 |---|---|
+| `gui/` | The desktop app (a separate Go module, because Fyne needs cgo): theme, widgets, job list, preview |
 | `cmd/briss` | The command line |
 | `internal/app` | What each command does |
 | `internal/pdf` | PDFium engine (WebAssembly; cgo with `-tags pdfium_cgo`), rendering, page census |
 | `internal/cluster`, `internal/overlay` | Page grouping and overlay images, as in Java Briss |
 | `internal/detect/legacy` | Tier T0, an exact port of the Java auto-crop |
 | `internal/detect/cv` | Tier T2, the scan detector |
-| `internal/crop` | The PDF writer (pdfcpu, pages cloned in place) |
+| `internal/crop` | The PDF writer (pdfcpu, pages cloned in place, straightening and text layers) |
+| `internal/ocr`, `internal/raster` | Tesseract driver; image turning and cutting |
 | `internal/cropdef`, `internal/bench` | Crop definition files; the benchmark |
 | `spike/` | The week-1 experiments and Python helpers (`spike/tools`) |
 | `legacy-java/` | The Java Briss 2.0 |
 
 Release archives for Linux, macOS and Windows are built by goreleaser when a `v*` tag
 is pushed (`.github/workflows/release.yml`); CI runs the tests on all three systems and
-scans for secrets with gitleaks. Never commit API keys or private documents: this is a
+scans for secrets with gitleaks; `.github/workflows/gui.yml` tests and builds the
+desktop app. The app's tests run without a display (`cd gui && go test ./...`);
+`BRISS_GUI_SHOTS=dir go test -run TestScreenshots .` writes the screenshots above. Never commit API keys or private documents: this is a
 public repository ([docs/decisions/0007-secrets.md](docs/decisions/0007-secrets.md),
 [docs/datasets.md](docs/datasets.md)).
 
@@ -371,7 +460,10 @@ briss-go uses [PDFium](https://pdfium.googlesource.com/pdfium/) through
 [go-pdfium](https://github.com/klippa-app/go-pdfium) (MIT) on the
 [wazero](https://wazero.io) WebAssembly runtime (Apache-2.0),
 [pdfcpu](https://github.com/pdfcpu/pdfcpu) (Apache-2.0) to write PDFs, and
-[Cobra](https://github.com/spf13/cobra) (Apache-2.0) for the command line. briss is
+[Cobra](https://github.com/spf13/cobra) (Apache-2.0) for the command line,
+[Fyne](https://fyne.io) (BSD-3-Clause) for the app, and optionally
+[Tesseract](https://github.com/tesseract-ocr/tesseract) (Apache-2.0), run as a separate
+program, for OCR. briss is
 licensed under the GPL-3.0 ([LICENSE.txt](LICENSE.txt)).
 
 ## Legacy Java version (Briss 2.0)

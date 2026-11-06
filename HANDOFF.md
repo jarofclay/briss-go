@@ -1,8 +1,10 @@
-# Handoff: state of the briss-go rewrite (2026-11-05, after phase 2 and the scan tier)
+# Handoff: state of the briss-go rewrite (2026-11-06, the desktop app)
 
-For whoever continues this work. Everything below is committed on branch
-`claude/happy-cray-vejte7` of `jarofclay/briss-go`; the branch has not been merged and
-no pull request has been opened. Read in this order: this file, `PLAN.md` (the plan,
+For whoever continues this work. The command line, the core and the scan tier are on
+branch `claude/happy-cray-vejte7` of `jarofclay/briss-go`; branch `claude/gui` adds the
+desktop app and the straighten, normalize and OCR steps on top of it (the owner asked
+for the app on its own branch). Neither branch has been merged and no pull request has
+been opened. Read in this order: this file, `PLAN.md` (the plan,
 with "Amended" markers where measurements changed it), `docs/decisions/` (one record per
 decision with its evidence), `spike/RESULTS.md` (measurements), `spike/README.md`.
 
@@ -23,6 +25,11 @@ decision with its evidence), `spike/RESULTS.md` (measurements), `spike/README.md
 | `internal/cluster` | Parity plus size-tolerance clustering, Java sampling (float32) | Exact vs Java |
 | `internal/overlay` | Streaming overlay with the Java formula and Java target size | Exact size vs Java; profiles within measured tolerance |
 | `internal/detect` | `Detector` interface (PLAN.md 4.2) and `PageDetector` for tiers that look at every page | Done |
+| `gui/` (branch `claude/gui`) | The desktop app, its own Go module (Fyne needs cgo): dark theme, drop zone, options panel, job list, preview window with editable boxes and result pages; headless tests and a screenshot test | Working; run under Xvfb and the Fyne test driver, not yet on a real desktop |
+| `internal/app/process.go` | Outputs (straighten re-fit, normalize), AddOCR | Tested |
+| `internal/crop/layer.go` | Content-stream turn about a pivot, invisible Helvetica text layer, also on /Rotate pages | Tested by rendering and text extraction |
+| `internal/ocr`, `internal/raster` | Tesseract finder and TSV reader; image turn and crop | Tested (OCR test skips without Tesseract) |
+| `.github/workflows/gui.yml` | Tests the app and builds Linux, macOS (both CPUs, .app) and Windows downloads on pushes to `claude/gui` and `master` | Steps checked locally (Linux build, shell syntax); not yet run on GitHub |
 | `internal/detect/cv` | Tier T2 `cv@1` (decision 0010): per-page ink analysis, text lines and figures, two-page split at the gutter; `debug_test.go` (`BRISS_CV_DEBUG="a.png,doc.pdf#3" BRISS_CV_DEBUG_OUT=dir`) draws its decisions, `probe_test.go` lists components and lines in a box | Working, tested; 78.4% of real sheets accepted |
 | `internal/pdf/kinds.go` | Page object census (text and image objects, largest image share) used by `auto` to spot scans | Done |
 | `internal/detect/legacy` | Tier T0, bit-exact port of `CropFinder` and `SplitFinder` | Exact vs Java on Java's overlays |
@@ -56,6 +63,8 @@ tier stays bit-compatible and Java quirks are fixed around it (0009).
 - Claude choice-only with panels: Opus 5.5 IoU 0.967, 0 clipped, about 3 c per cluster.
 - Fyne editor on a software renderer: 60 fps at 100% scaling (9 of 11 windows), about 40 fps at 4K/200%.
 - Local layout models on the synthetic corpus: DocLayout-YOLO, PP-DocLayoutV2 and PP-DocLayoutV3 all reach 39 to 40 of 40 scans accepted, none or one clipped, and 35 of 40 book pages, at 0.65 to 1.0 s per page (V2 fastest). Accuracy gate passed, speed gate missed.
+- Straighten: on the real scans the detected lean has median 0.5 degrees, 90% under 1.1, at most 3.2; pages that really lean 3 degrees come out level. Projection-profile search over glyph bottoms on the outer 60% of a book page; per-line fits were fooled by ink bridging two lines.
+- `crop --straighten --normalize --ocr` on a 16-sheet real scan: 32 pages, two page sizes (left and right), text layer on all, 21 s on 4 threads (OCR is most of it).
 - `briss bench` legacy baseline on the synthetic corpus: 43.7% of 467 pages accepted, 0 clipped, mean IoU 0.919.
 - Real scans (owner's private set: 10 photocopied books, 171 two-page sheets, draft labels with headers kept): legacy 0% accepted (163 count mismatches), `cv` 78.4% accepted, 12.3% clipped, mean IoU 0.973, 10 s for all sheets; PP-DocLayoutV3 76.0%, 17.5% clipped, about 0.9 s per sheet. `auto` picks `cv` for all ten. Upper bounds until the owner reviews the labels (proposer bias).
 - Synthetic corpus with the same build: `cv` 74 of 118 single scans and 24 of 59 two-up sheets; most of its "clips" there are 1.0 to 1.2% because the synthetic labels are layout boxes slightly outside the ink.
@@ -75,6 +84,9 @@ tier stays bit-compatible and Java quirks are fixed around it (0009).
 - Fyne on Linux needs `libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev wayland-protocols`.
 - The community DocLayout-YOLO ONNX export uses Ultralytics metadata (`names`, not `character`) and an end-to-end head; rapid_layout cannot load it, `onnx_eval.py --format yolo-e2e` can. ONNX Runtime dynamic int8 quantization needs `onnx` and `skip_symbolic_shape=True` without `sympy`.
 - Background shell loops started with `&` inside a tool call die when the call returns; use the tool's background mode.
+- Fyne: the software painter (test driver, screenshots) panics on rounded rectangles of negative size, so clamp sizes in custom layouts; containers whose children were shown or hidden need a Refresh on the container; `Driver().AllWindows()` has no fixed order, find windows by title; UI changes from goroutines go through `fyne.Do`.
+- pdfium's structured text boxes are in PDF user space (bottom-left origin, unrotated page), not display coordinates.
+- `crop.Write` creates the output with `os.CreateTemp` (mode 0600); it now copies the source's permissions before the rename.
 - Debug the scan tier on pages rendered by the app's engine (`BRISS_CV_DEBUG="doc.pdf#3"`), not on pypdfium2 renders: the two differ by a grey level or so, and that once moved a gutter decision.
 - Judge every scan-tier change with `briss bench` against the labels, not by looking at a few sheets: several fixes that looked right on the sheet in front of me cost more sheets elsewhere (flattening narrow dithered gutters, stray-cluster filters that ate short headings).
 - Narrow dark gutters are often dithered and flattening them turns their texture into "ink"; wide binding shadows are smooth and need flattening, or the text running into them is lost. The stacked page edges of a thick book carry fragments of other pages' lines that look like text; requiring lines to be wider than tall and short lines to share a baseline with the text keeps most of them out.
@@ -86,12 +98,13 @@ Reachable: PyPI, the Go module proxy (gitleaks and goreleaser build from it), Ma
 
 ## 6. Open items, in order
 
-1. **Owner review of the draft labels.** The real scans live in the private repository `jarofclay/briss-go.data` (attach it to the session; never copy its files or names into this fork). Draft labels for all 171 sheets are on its branch `claude/draft-labels`, with `LABELING.md` (rules, method, proposer bias) and `labeling/` (both proposals, per-sheet decisions, rebuild script). Once reviewed and merged there, rerun `briss bench --dataset <clone> --detectors legacy,cv,auto` and the layout models through `dir:` predictions, and update the numbers here and in `spike/RESULTS.md`.
-2. **Scan-tier follow-ups**: headers cut by the scan border, fragments in stacked page edges beside left pages, pencil and handwritten marks on title pages (the remaining failures in `spike/RESULTS.md`); light grey figure boxes; then the GUI review strip so a user confirms T2 results. More scans (other books, other scanners) are needed before more tuning, to avoid fitting these ten.
-3. **Phase 3, GUI** (PLAN.md section 7): port `spike/gui/editor.go` into `internal/gui`, start screen, cluster grid, save and load crop definitions; the GPU frame check (PLAN.md 7.3) at the end of its first week.
-4. **Phase 4, detection**: tier T1 structural next (T2 is done; T1 decides most born-digital pages), then T3 with the model the real-document bench favours (PP-DocLayoutV2 is fastest; the speed gate needs fewer sampled pages or a smaller input), then T4 by porting `spike/claude` into `internal/detect/claude`, then `auto`, `model pull` and `config` (API key in the OS keychain).
-5. **First CI run.** The workflows only run on `master`; the first push or PR there runs the three-OS test matrix and the gitleaks job for the first time. Windows was checked by cross-compiling and vetting only.
-6. Open questions in PLAN.md section 14 ("Jev" is still unidentified).
+1. **Desktop app on real desktops.** Run the app from the CI downloads (or `cd gui && go build`) on macOS and Windows, check drag and drop, the file chooser, opening outputs, HiDPI, and the frame check of PLAN.md 7.3. Known gaps: macOS "Open with" sends an Apple event Fyne may not pass on; the downloads are unsigned; OCR language is fixed to English in the app (`--ocr-lang` on the command line); the preview edits one sheet at a time.
+2. **Owner review of the draft labels.** The real scans live in the private repository `jarofclay/briss-go.data` (attach it to the session; never copy its files or names into this fork). Draft labels for all 171 sheets are on its branch `claude/draft-labels`, with `LABELING.md` (rules, method, proposer bias) and `labeling/` (both proposals, per-sheet decisions, rebuild script). Once reviewed and merged there, rerun `briss bench --dataset <clone> --detectors legacy,cv,auto` and the layout models through `dir:` predictions, and update the numbers here and in `spike/RESULTS.md`.
+3. **Scan-tier follow-ups**: headers cut by the scan border, fragments in stacked page edges beside left pages, pencil and handwritten marks on title pages (the remaining failures in `spike/RESULTS.md`); light grey figure boxes; then the GUI review strip so a user confirms T2 results. More scans (other books, other scanners) are needed before more tuning, to avoid fitting these ten.
+4. **Phase 3, GUI parity** (PLAN.md section 7.1, as far as decision 0011 wants it): cluster-wide editing in the preview, Load and Save crops, an OCR language picker.
+5. **Phase 4, detection**: tier T1 structural next (T2 is done; T1 decides most born-digital pages), then T3 with the model the real-document bench favours (PP-DocLayoutV2 is fastest; the speed gate needs fewer sampled pages or a smaller input), then T4 by porting `spike/claude` into `internal/detect/claude`, then `auto`, `model pull` and `config` (API key in the OS keychain).
+6. **First CI run.** The workflows only run on `master`; the first push or PR there runs the three-OS test matrix and the gitleaks job for the first time. Windows was checked by cross-compiling and vetting only.
+7. Open questions in PLAN.md section 14 ("Jev" is still unidentified).
 
 ## 7. Commands
 
@@ -101,6 +114,14 @@ go test ./...
 
 ```bash
 go build -o briss ./cmd/briss && ./briss -s testdata/pdfs/book300.pdf -d /tmp/book300_cropped.pdf --split-col
+```
+
+```bash
+cd gui && go test ./... && go build -o briss-gui .
+```
+
+```bash
+cd gui && BRISS_GUI_SHOTS=/tmp/shots BRISS_GUI_SAMPLE=../spike/testdata/scan_twoup.pdf go test -run TestScreenshots .
 ```
 
 ```bash

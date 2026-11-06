@@ -42,6 +42,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   two-page sheets at the gutter; `auto` uses it for scanned PDFs. `briss preview --pages`
   draws on the pages themselves. `briss bench` runs detectors with the label's
   `keep_headers` setting and scores precomputed predictions with `--detectors dir:PATH`.
+* Desktop app (`gui/`, branch `claude/gui`): a dark, minimal window with a drop zone;
+  files are cropped automatically, or reviewed first in a preview window with draggable
+  crop boxes and the resulting pages beside them. Options: mode (auto, preview, preview
+  only), margin, same page size, OCR, straighten, keep headers. CI builds it for Linux,
+  macOS and Windows.
+* `crop` and `apply` take `--straighten` (scanned pages turned level), `--normalize`
+  (one size for every output page of a kind) and `--ocr` / `--ocr-lang` (invisible text
+  layer from Tesseract). Output files get the source file's permissions.
 * `briss preview --crops FILE` draws a saved crop definition (for example a label) on the
   pages without detecting; `crop`, `apply` and `bench --report` create missing output
   folders. The README explains downloading, building and checking labels step by step.

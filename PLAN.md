@@ -331,6 +331,15 @@ Crop definition JSON (v1) is the contract between CLI, GUI, and the dataset:
 
 ## 7. GUI design (Fyne)
 
+**As built (Amended 2026-11-06, decision 0011).** At the owner's request the app is not a
+port of these screens: it opens on a drop zone and crops dropped PDFs straight away;
+an options panel holds the mode (Auto, Preview, Preview only), margin, same page size,
+OCR, straighten and keep headers (all on by default); the preview edits one sheet at a
+time and shows the resulting pages beside it. It lives in `gui/` (its own Go module,
+because of cgo) on branch `claude/gui`, and CI builds it for the three systems. The
+parity list below remains the reference for later additions (cluster-wide editing,
+copy and align tools, Load and Save crops).
+
 ### 7.1 Parity screens
 1. **Start screen**: drop zone and Open button, recent files, version, link to help. Dropping or opening a PDF prompts for a password only if needed, then for excluded pages (same syntax, prefilled from the last run on that file).
 2. **Cluster grid**: wrapping grid of cluster panels, each showing the overlay at display scale with a header "Odd pages, 156 pages: 1, 3, 5 ..." and a status chip (detector used, confidence, elapsed).

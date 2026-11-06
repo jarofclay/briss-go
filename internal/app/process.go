@@ -51,7 +51,8 @@ func Outputs(def *cropdef.Definition, pages []pdf.PageInfo, ex Extras) (map[int]
 			o := crop.Output{Rect: r.Ratios()}
 			if a := r.Angle; ex.Straighten && math.Abs(a) >= minTurn && math.Abs(a) <= maxTurn {
 				if sr, ok := straightRect(o.Rect, a, pi.Width, pi.Height); ok {
-					o.Rect, o.Angle = sr, a
+					px, py := o.PivotPoint() // the content's centre, kept when normalising moves the box
+					o.Rect, o.Angle, o.Pivot = sr, a, &[2]float64{px, py}
 				}
 			}
 			outs[p] = append(outs[p], o)
@@ -250,7 +251,8 @@ func outputAt(os []crop.Output, x, y float64, pi pdf.PageInfo) int {
 		y0, y1 := o.Rect.T*pi.Height, (1-o.Rect.B)*pi.Height
 		px, py := x, y
 		if o.Angle != 0 {
-			cx, cy := (x0+x1)/2, (y0+y1)/2
+			rx, ry := o.PivotPoint()
+			cx, cy := rx*pi.Width, ry*pi.Height
 			s, c := math.Sincos(o.Angle * math.Pi / 180)
 			dx, dy := x-cx, y-cy
 			px, py = cx+dx*c+dy*s, cy-dx*s+dy*c // counterclockwise on screen, y down

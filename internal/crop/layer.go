@@ -19,8 +19,19 @@ import (
 // optionally carrying an invisible OCR text layer.
 type Output struct {
 	Rect  geom.Ratios
-	Angle float64 // degrees counterclockwise, turned about the rectangle's centre
-	Words []Word  // OCR words to lay over the page as invisible, selectable text
+	Angle float64 // degrees counterclockwise, turned about Pivot
+	// Pivot is the point the page is turned about, in display ratios from
+	// the left and top of the source page; nil means the centre of Rect.
+	Pivot *[2]float64
+	Words []Word // OCR words to lay over the page as invisible, selectable text
+}
+
+// PivotPoint returns the turning point in display ratios.
+func (o Output) PivotPoint() (float64, float64) {
+	if o.Pivot != nil {
+		return o.Pivot[0], o.Pivot[1]
+	}
+	return (o.Rect.L + 1 - o.Rect.R) / 2, (o.Rect.T + 1 - o.Rect.B) / 2
 }
 
 // Word is one recognised word: its text and its box on the source page as
@@ -193,7 +204,7 @@ func effectiveResources(pctx *model.Context, d types.Dict) (types.Dict, error) {
 // decorate turns and annotates one output page: its content becomes
 // "q [turn] q <original> Q [text layer] Q", so the original drawing cannot
 // leak state into what follows and the text layer turns with the scan.
-func decorate(pctx *model.Context, target types.Dict, box geom.Rect, ref geom.Rect, rot int, out Output, fontRef **types.IndirectRef) error {
+func decorate(pctx *model.Context, target types.Dict, ref geom.Rect, rot int, out Output, fontRef **types.IndirectRef) error {
 	turn := math.Abs(out.Angle) >= 0.01
 	layer := textLayer(out.Words, ref, rot)
 	if !turn && layer == nil {
@@ -201,7 +212,9 @@ func decorate(pctx *model.Context, target types.Dict, box geom.Rect, ref geom.Re
 	}
 	pre := "q\n"
 	if turn {
-		pre += rotationCM(out.Angle, (box.LLX+box.URX)/2, (box.LLY+box.URY)/2)
+		px, py := out.PivotPoint()
+		pv := geom.ScaledBox(ref, nil, geom.Ratios{L: px, R: 1 - px, T: py, B: 1 - py}, rot)
+		pre += rotationCM(out.Angle, pv.LLX, pv.LLY)
 	}
 	pre += "q\n"
 	post := append([]byte("\nQ\n"), layer...)

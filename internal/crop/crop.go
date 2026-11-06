@@ -92,6 +92,14 @@ func WriteOutputs(ctx context.Context, src, dst string, pages map[int][]Output, 
 		os.Remove(tmpName)
 		return st, fmt.Errorf("crop: writing %s: %w", dst, err)
 	}
+	mode := os.FileMode(0o644) // CreateTemp makes 0600; give the output the source's permissions
+	if fi, err := os.Stat(src); err == nil {
+		mode = fi.Mode().Perm() | 0o200
+	}
+	if err := os.Chmod(tmpName, mode); err != nil {
+		os.Remove(tmpName)
+		return st, err
+	}
 	if err := os.Rename(tmpName, dst); err != nil {
 		os.Remove(tmpName)
 		return st, err
@@ -177,7 +185,7 @@ func apply(ctx context.Context, pctx *model.Context, pages map[int][]Output) (St
 			if cur.rot != 0 {
 				target["Rotate"] = types.Integer(cur.rot) // explicit, so inheritance cannot drift
 			}
-			if err := decorate(pctx, target, b, ref, cur.rot, o, &fontRef); err != nil {
+			if err := decorate(pctx, target, ref, cur.rot, o, &fontRef); err != nil {
 				return st, fmt.Errorf("crop: page %d copy %d: %w", p, k+1, err)
 			}
 		}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/jarofclay/briss-go/internal/detect"
 	"github.com/jarofclay/briss-go/internal/geom"
+	"github.com/jarofclay/briss-go/internal/raster"
 )
 
 // sheet builds a gray page with optional scan artefacts.
@@ -223,4 +224,39 @@ func TestGutterShadowWins(t *testing.T) {
 		t.Fatalf("left page should end after its page numbers: %v", left)
 	}
 	near(t, "right page", px(r.Rects[1], w, h), [4]int{560, 100, 1020, lastLine(100, 700, 10, 5)}, 6)
+}
+
+// A two-page sheet whose left page leans 2 degrees counterclockwise and
+// whose right page leans 1.5 degrees clockwise: the angles that straighten
+// them are about -2 and +1.5.
+func TestSkewAngles(t *testing.T) {
+	const w, h = 1400, 1000
+	s := newSheet(w, h, 11)
+	s.text(100, 120, 620, 880, 11, 7)
+	left := raster.Rotate(s.g, 2, 360, 500, 238)
+	s2 := newSheet(w, h, 12)
+	s2.text(780, 120, 1300, 880, 11, 7)
+	right := raster.Rotate(s2.g, -1.5, 1040, 500, 238)
+	sheet := image.NewGray(image.Rect(0, 0, w, h))
+	for i := range sheet.Pix {
+		sheet.Pix[i] = min(left.Pix[i], right.Pix[i])
+	}
+	r := New().DetectPage(sheet, detect.Options{KeepHeaders: true})
+	if len(r.Rects) != 2 || len(r.Angles) != 2 {
+		t.Fatalf("expected two pages with angles: %+v", r)
+	}
+	if math.Abs(r.Angles[0]-(-2)) > 0.15 || math.Abs(r.Angles[1]-1.5) > 0.15 {
+		t.Fatalf("angles %v, want about [-2 1.5]", r.Angles)
+	}
+	flat := New().DetectPage(newSheetText(t), detect.Options{KeepHeaders: true})
+	if len(flat.Angles) != 1 || math.Abs(flat.Angles[0]) > 0.05 {
+		t.Fatalf("a level page must not be turned: %v", flat.Angles)
+	}
+}
+
+func newSheetText(t *testing.T) *image.Gray {
+	t.Helper()
+	s := newSheet(700, 900, 13)
+	s.text(80, 100, 620, 800, 12, 6)
+	return s.g
 }

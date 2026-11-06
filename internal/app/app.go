@@ -227,21 +227,26 @@ type CropRequest struct {
 	SaveCrops string // write the crop definition used
 	DryRun    bool   // detect and report, write no PDF
 	Force     bool   // apply a crop definition made for a different file
+	Extras    Extras
+	Progress  Progress
 }
 
 // Report summarises a run; it is also the --json output.
 type Report struct {
-	Source      string           `json:"source"`
-	Output      string           `json:"output,omitempty"`
-	Crops       string           `json:"crops,omitempty"`
-	Detector    string           `json:"detector,omitempty"`
-	SourcePages int              `json:"source_pages"`
-	OutputPages int              `json:"output_pages,omitempty"`
-	Clones      int              `json:"clones,omitempty"`
-	DryRun      bool             `json:"dry_run,omitempty"`
-	Clusters    []ClusterSummary `json:"clusters"`
-	TimingsMS   map[string]int64 `json:"timings_ms"`
-	Warnings    []string         `json:"warnings,omitempty"`
+	Source       string           `json:"source"`
+	Output       string           `json:"output,omitempty"`
+	Crops        string           `json:"crops,omitempty"`
+	Detector     string           `json:"detector,omitempty"`
+	SourcePages  int              `json:"source_pages"`
+	OutputPages  int              `json:"output_pages,omitempty"`
+	Clones       int              `json:"clones,omitempty"`
+	DryRun       bool             `json:"dry_run,omitempty"`
+	Clusters     []ClusterSummary `json:"clusters"`
+	TimingsMS    map[string]int64 `json:"timings_ms"`
+	Warnings     []string         `json:"warnings,omitempty"`
+	Straightened int              `json:"straightened,omitempty"` // output pages turned level
+	Normalized   bool             `json:"normalized,omitempty"`
+	OCRPages     int              `json:"ocr_pages,omitempty"` // source pages given a text layer
 }
 
 // ClusterSummary is one cluster in a Report.
@@ -281,6 +286,9 @@ func Crop(ctx context.Context, eng *pdf.Engine, req CropRequest) (*Report, error
 	rep := &Report{Source: req.Src, TimingsMS: map[string]int64{}, DryRun: req.DryRun}
 	var def *cropdef.Definition
 	var res *pipeline.Result
+	if req.Progress != nil {
+		req.Progress("detect", 0, 1)
+	}
 	if req.CropsIn != "" {
 		d, warn, err := LoadCropsFor(ctx, eng, req.CropsIn, req.Src, req.Options.Password, req.Force)
 		if err != nil {
@@ -310,18 +318,50 @@ func Crop(ctx context.Context, eng *pdf.Engine, req CropRequest) (*Report, error
 		rep.TimingsMS["total"] = time.Since(t0).Milliseconds()
 		return rep, nil
 	}
-	rects, err := def.PageRects()
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrInput, err)
-	}
 	dst, err := Destination(req.Src, req.Dst)
 	if err != nil {
 		return nil, err
 	}
+	var doc *pdf.Document
+	if res != nil {
+		doc = res.Doc
+	} else if doc, err = eng.Open(ctx, req.Src, req.Options.Password); err != nil {
+		return nil, inputErr(err)
+	}
+	if req.Progress != nil {
+		req.Progress("detect", 1, 1)
+	}
+	outs, err := Outputs(def, doc.Pages, req.Extras)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInput, err)
+	}
+	for _, os := range outs {
+		for _, o := range os {
+			if o.Angle != 0 {
+				rep.Straightened++
+			}
+		}
+	}
+	rep.Normalized = req.Extras.Normalize
+	if req.Extras.OCR {
+		t2 := time.Now()
+		n, warn, err := AddOCR(ctx, eng, doc, outs, req.Extras.OCRLang, req.Progress)
+		if err != nil {
+			return nil, err
+		}
+		rep.OCRPages, rep.Warnings = n, append(rep.Warnings, warn...)
+		rep.TimingsMS["ocr"] = time.Since(t2).Milliseconds()
+	}
+	if req.Progress != nil {
+		req.Progress("write", 0, 1)
+	}
 	t1 := time.Now()
-	st, err := crop.Write(ctx, req.Src, dst, rects, crop.Options{Password: req.Options.Password})
+	st, err := crop.WriteOutputs(ctx, req.Src, dst, outs, crop.Options{Password: req.Options.Password})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrWrite, err)
+	}
+	if req.Progress != nil {
+		req.Progress("write", 1, 1)
 	}
 	rep.Output, rep.OutputPages, rep.Clones = dst, st.OutputPages, st.Clones
 	rep.TimingsMS["write"] = time.Since(t1).Milliseconds()
@@ -548,11 +588,14 @@ func detectPages(ctx context.Context, eng *pdf.Engine, res *pipeline.Result, pd 
 		return err
 	}
 	for _, c := range res.Clusters {
-		cand := detect.Candidate{Source: pd.Name(), PerPage: map[int][]geom.Ratios{}, Confidence: 1}
+		cand := detect.Candidate{Source: pd.Name(), PerPage: map[int][]geom.Ratios{}, PerPageAngles: map[int][]float64{}, Confidence: 1}
 		split := 0
 		for _, p := range c.Cluster.Pages {
 			r := results[p-1]
 			cand.PerPage[p] = r.Rects
+			if len(r.Angles) == len(r.Rects) {
+				cand.PerPageAngles[p] = r.Angles
+			}
 			cand.Confidence = math.Min(cand.Confidence, r.Confidence)
 			if len(r.Rects) > 1 {
 				split++

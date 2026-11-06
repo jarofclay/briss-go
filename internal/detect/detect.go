@@ -28,11 +28,12 @@ type Request struct {
 
 // Candidate is a detector's proposal for one cluster.
 type Candidate struct {
-	Rects      []geom.Ratios         // rectangles in output order
-	PerPage    map[int][]geom.Ratios // optional per-page overrides, 1-based pages
-	Confidence float64               // 0..1, tier-defined
-	Source     string                // tier name and version, for provenance
-	Notes      string
+	Rects         []geom.Ratios         // rectangles in output order
+	PerPage       map[int][]geom.Ratios // optional per-page overrides, 1-based pages
+	PerPageAngles map[int][]float64     // optional skew per PerPage rectangle, degrees (see PageResult)
+	Confidence    float64               // 0..1, tier-defined
+	Source        string                // tier name and version, for provenance
+	Notes         string
 }
 
 // Detector is one detection tier.
@@ -46,6 +47,7 @@ type Detector interface {
 // PageResult is a page detector's answer for one page.
 type PageResult struct {
 	Rects      []geom.Ratios // rectangles in output order (left page first on a two-up sheet)
+	Angles     []float64     // per rectangle: skew of its text in degrees, counterclockwise turn that straightens it (nil: unknown)
 	Confidence float64
 	Notes      string
 }

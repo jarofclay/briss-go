@@ -20,12 +20,16 @@ import (
 // Version is the format version written by this package.
 const Version = 1
 
-// Rect is a crop rectangle in briss ratios.
+// Rect is a crop rectangle in briss ratios. Angle, when set, straightens the
+// page: the content is turned by that many degrees counterclockwise about the
+// rectangle's centre before cropping (a scan that leans clockwise gets a
+// positive angle). The rectangle describes the straightened content.
 type Rect struct {
-	L float64 `json:"l"`
-	B float64 `json:"b"`
-	R float64 `json:"r"`
-	T float64 `json:"t"`
+	L     float64 `json:"l"`
+	B     float64 `json:"b"`
+	R     float64 `json:"r"`
+	T     float64 `json:"t"`
+	Angle float64 `json:"angle,omitempty"`
 }
 
 // Ratios converts to geom.Ratios.
@@ -115,6 +119,31 @@ func (d *Definition) Validate() error {
 		}
 	}
 	return nil
+}
+
+// PageOutputs is PageRects with the straightening angles: the rectangles,
+// in output order, for every page that has any.
+func (d *Definition) PageOutputs() (map[int][]Rect, error) {
+	if err := d.Validate(); err != nil {
+		return nil, err
+	}
+	out := map[int][]Rect{}
+	for _, c := range d.Clusters {
+		if len(c.Rects) == 0 {
+			continue
+		}
+		for _, p := range c.Pages {
+			out[p] = append([]Rect(nil), c.Rects...)
+		}
+	}
+	for p, rs := range d.PageOverrides {
+		if len(rs) == 0 {
+			delete(out, p)
+			continue
+		}
+		out[p] = append([]Rect(nil), rs...)
+	}
+	return out, nil
 }
 
 // PageRects returns the rectangles for every page that has any: cluster

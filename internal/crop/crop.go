@@ -49,6 +49,18 @@ func RecommendedDestination(src string) string {
 // rectangles in output order; pages without an entry are copied unchanged.
 // The output is written to a temporary file next to dst and renamed into place.
 func Write(ctx context.Context, src, dst string, pages map[int][]geom.Ratios, opts Options) (Stats, error) {
+	outs := make(map[int][]Output, len(pages))
+	for p, rs := range pages {
+		for _, r := range rs {
+			outs[p] = append(outs[p], Output{Rect: r})
+		}
+	}
+	return WriteOutputs(ctx, src, dst, outs, opts)
+}
+
+// WriteOutputs is Write with straightening and text layers: every Output
+// becomes one page, in order, turned by its Angle and carrying its Words.
+func WriteOutputs(ctx context.Context, src, dst string, pages map[int][]Output, opts Options) (Stats, error) {
 	f, err := os.Open(src)
 	if err != nil {
 		return Stats{}, err
@@ -102,15 +114,15 @@ func toRect(r *types.Rectangle) *geom.Rect {
 	return &geom.Rect{LLX: r.LL.X, LLY: r.LL.Y, URX: r.UR.X, URY: r.UR.Y}
 }
 
-func apply(ctx context.Context, pctx *model.Context, pages map[int][]geom.Ratios) (Stats, error) {
+func apply(ctx context.Context, pctx *model.Context, pages map[int][]Output) (Stats, error) {
 	n := pctx.PageCount
 	st := Stats{SourcePages: n}
 	for p, rects := range pages {
 		if p < 1 || p > n {
 			return st, fmt.Errorf("crop: page %d out of range 1..%d", p, n)
 		}
-		for i, r := range rects {
-			if !r.Valid() {
+		for i, o := range rects {
+			if r := o.Rect; !r.Valid() {
 				return st, fmt.Errorf("crop: page %d rectangle %d is invalid: %+v", p, i, r)
 			}
 		}
@@ -127,16 +139,26 @@ func apply(ctx context.Context, pctx *model.Context, pages map[int][]geom.Ratios
 		}
 		refs[p-1] = pageRef{dict: d, ref: ref, media: *toRect(attrs.MediaBox), crop: toRect(attrs.CropBox), rot: geom.NormalizeRotation(attrs.Rotate)}
 	}
+	var fontRef *types.IndirectRef
 	for p := 1; p <= n; p++ {
 		rects := pages[p]
 		cur := refs[p-1]
 		prev := cur.ref
-		for k, r := range rects {
-			b := geom.ScaledBox(cur.media, cur.crop, r, cur.rot)
+		ref := cur.media
+		if cur.crop != nil && cur.crop.Area() < cur.media.Area() {
+			ref = *cur.crop
+		}
+		// the source page as it was, before the first output changes it
+		orig := types.Dict{}
+		for key, val := range cur.dict {
+			orig[key] = val
+		}
+		for k, o := range rects {
+			b := geom.ScaledBox(cur.media, cur.crop, o.Rect, cur.rot)
 			target := cur.dict
 			if k > 0 {
 				clone := types.Dict{}
-				for key, val := range cur.dict {
+				for key, val := range orig {
 					clone[key] = val
 				}
 				ref, err := pctx.IndRefForNewObject(clone)
@@ -154,6 +176,9 @@ func apply(ctx context.Context, pctx *model.Context, pages map[int][]geom.Ratios
 			target["CropBox"] = box
 			if cur.rot != 0 {
 				target["Rotate"] = types.Integer(cur.rot) // explicit, so inheritance cannot drift
+			}
+			if err := decorate(pctx, target, b, ref, cur.rot, o, &fontRef); err != nil {
+				return st, fmt.Errorf("crop: page %d copy %d: %w", p, k+1, err)
 			}
 		}
 	}

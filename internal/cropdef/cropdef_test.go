@@ -14,10 +14,10 @@ func sample() *Definition {
 		Version: Version,
 		Source:  Source{Path: "book.pdf", Pages: 4},
 		Clusters: []Cluster{
-			{ID: 0, Pages: []int{1, 3}, BoxPt: [2]float64{612, 792}, Rects: []Rect{{0.1, 0.1, 0.1, 0.1}}, Source: "legacy@1"},
-			{ID: 1, Pages: []int{2, 4}, Even: true, BoxPt: [2]float64{612, 792}, Rects: []Rect{{0.1, 0.1, 0.5, 0.1}, {0.5, 0.1, 0.1, 0.1}}},
+			{ID: 0, Pages: []int{1, 3}, BoxPt: [2]float64{612, 792}, Rects: []Rect{{L: 0.1, B: 0.1, R: 0.1, T: 0.1}}, Source: "legacy@1"},
+			{ID: 1, Pages: []int{2, 4}, Even: true, BoxPt: [2]float64{612, 792}, Rects: []Rect{{L: 0.1, B: 0.1, R: 0.5, T: 0.1}, {L: 0.5, B: 0.1, R: 0.1, T: 0.1}}},
 		},
-		PageOverrides: map[int][]Rect{3: {{0.2, 0.2, 0.2, 0.2}}, 4: {}},
+		PageOverrides: map[int][]Rect{3: {{L: 0.2, B: 0.2, R: 0.2, T: 0.2}}, 4: {}},
 	}
 }
 
@@ -64,7 +64,7 @@ func TestValidateErrors(t *testing.T) {
 		"page range":     func(d *Definition) { d.Clusters[0].Pages = append(d.Clusters[0].Pages, 9) },
 		"duplicate page": func(d *Definition) { d.Clusters[1].Pages = append(d.Clusters[1].Pages, 1) },
 		"bad rect":       func(d *Definition) { d.Clusters[0].Rects[0].L = 0.95 },
-		"bad override":   func(d *Definition) { d.PageOverrides[3] = []Rect{{-0.1, 0, 0, 0}} },
+		"bad override":   func(d *Definition) { d.PageOverrides[3] = []Rect{{L: -0.1}} },
 	}
 	for name, mutate := range cases {
 		d := sample()

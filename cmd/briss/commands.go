@@ -63,6 +63,15 @@ func (f *analysisFlags) options(stdin io.Reader) (app.Options, error) {
 	}, nil
 }
 
+// extraFlags registers the steps beyond cropping, shared by crop and apply.
+func extraFlags(c *cobra.Command, ex *app.Extras) {
+	fl := c.Flags()
+	fl.BoolVar(&ex.Straighten, "straighten", false, "turn leaning scanned pages level (scan detector only)")
+	fl.BoolVar(&ex.Normalize, "normalize", false, "give every output page the same size")
+	fl.BoolVar(&ex.OCR, "ocr", false, "add an invisible text layer to scanned pages (needs Tesseract)")
+	fl.StringVar(&ex.OCRLang, "ocr-lang", "eng", `Tesseract languages, e.g. "eng+deu"`)
+}
+
 func engine(threads int) (*pdf.Engine, error) {
 	eng, err := pdf.NewEngine(pdf.EngineOptions{Workers: threads})
 	if err != nil {
@@ -109,6 +118,12 @@ func printReport(w io.Writer, rep *app.Report, quiet bool) {
 	if rep.Crops != "" {
 		fmt.Fprintln(w, "crop definition:", rep.Crops)
 	}
+	if rep.Straightened > 0 {
+		fmt.Fprintf(w, "straightened %d pages\n", rep.Straightened)
+	}
+	if rep.OCRPages > 0 {
+		fmt.Fprintf(w, "added a text layer to %d pages\n", rep.OCRPages)
+	}
 	if rep.Output != "" {
 		fmt.Fprintf(w, "wrote %s: %d pages (%d added by splits) in %d ms\n", rep.Output, rep.OutputPages, rep.Clones, rep.TimingsMS["total"])
 	}
@@ -150,12 +165,14 @@ func cropCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	var f analysisFlags
 	var out, crops, saveCrops string
 	var dryRun, force, asJSON, quiet bool
+	var ex app.Extras
 	c := &cobra.Command{
 		Use:   "crop SOURCE.pdf",
 		Short: "Detect crop rectangles and write the cropped PDF",
 		Example: `  briss crop book.pdf
   briss crop book.pdf -o small.pdf --margin 3pt --split-col
-  briss crop scan.pdf --exclude "1-2" --save-crops scan.crops.json`,
+  briss crop scan.pdf --exclude "1-2" --save-crops scan.crops.json
+  briss crop scan.pdf --straighten --normalize --ocr`,
 		Args: exactlyOnePDF,
 		RunE: func(c *cobra.Command, args []string) error {
 			opts, err := f.options(stdin)
@@ -167,7 +184,7 @@ func cropCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 				return err
 			}
 			defer eng.Close()
-			rep, err := app.Crop(context.Background(), eng, app.CropRequest{Src: args[0], Dst: out, Options: opts, CropsIn: crops, SaveCrops: saveCrops, DryRun: dryRun, Force: force})
+			rep, err := app.Crop(context.Background(), eng, app.CropRequest{Src: args[0], Dst: out, Options: opts, CropsIn: crops, SaveCrops: saveCrops, DryRun: dryRun, Force: force, Extras: ex})
 			if err != nil {
 				return err
 			}
@@ -182,6 +199,7 @@ func cropCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	c.Flags().StringVarP(&out, "output", "o", "", "output PDF or directory (default SOURCE_cropped.pdf)")
 	c.Flags().StringVar(&crops, "crops", "", "apply this crop definition instead of detecting")
 	c.Flags().StringVar(&saveCrops, "save-crops", "", "write the crop definition that was applied")
+	extraFlags(c, &ex)
 	c.Flags().BoolVar(&dryRun, "dry-run", false, "detect and report, write no PDF")
 	c.Flags().BoolVar(&force, "force", false, "apply a crop definition made for a different file")
 	c.Flags().BoolVar(&asJSON, "json", false, "print a JSON report")
@@ -235,6 +253,7 @@ func applyCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	var out, crops, password string
 	var passwordStdin, force, asJSON, quiet bool
 	var threads int
+	var ex app.Extras
 	c := &cobra.Command{
 		Use:     "apply SOURCE.pdf --crops CROPS.json",
 		Short:   "Crop a PDF with a saved crop definition",
@@ -251,7 +270,7 @@ func applyCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 				return err
 			}
 			defer eng.Close()
-			rep, err := app.Crop(context.Background(), eng, app.CropRequest{Src: args[0], Dst: out, Options: opts, CropsIn: crops, Force: force})
+			rep, err := app.Crop(context.Background(), eng, app.CropRequest{Src: args[0], Dst: out, Options: opts, CropsIn: crops, Force: force, Extras: ex})
 			if err != nil {
 				return err
 			}
@@ -271,6 +290,7 @@ func applyCmd(stdin io.Reader, stdout io.Writer) *cobra.Command {
 	c.Flags().BoolVar(&asJSON, "json", false, "print a JSON report")
 	c.Flags().BoolVarP(&quiet, "quiet", "q", false, "print nothing on success")
 	c.Flags().IntVar(&threads, "threads", 0, "parallel render workers")
+	extraFlags(c, &ex)
 	return c
 }
 

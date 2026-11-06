@@ -59,6 +59,8 @@ type Params struct {
 	EdgeZone      float64 // ... when they reach into this share of the sheet height at the top or bottom
 	SideGap       float64 // glyph columns this close beside the block join it (page numbers in a contents list)
 	FooterWidth   float64 // a detached bottom line at least this share of the block width is body text, not a footer
+	MaxSkew       float64 // straightening angles are searched up to this many degrees either way ...
+	SkewContrast  float64 // ... and kept only when the best angle's baseline sharpness is this many times the average
 	ShadowDelta   int     // marks whose surroundings are this many grey levels darker than the paper sit in a shadow
 	FlatMin       int     // columns whose paper is darker than this are left alone by flattening (black borders) ...
 	FlatWidth     float64 // ... and so are shaded bands narrower than this share of the width
@@ -74,7 +76,7 @@ var DefaultParams = Params{
 	HeaderBand: 0.022, HeaderGap: 0.012,
 	Pad: 0.003, StripeWidth: 0.006, StripeCover: 0.2,
 	LineJoin: 1.2, MinLineGlyphs: 3, GlyphMin: 0.5, GutterShade: 10,
-	ClusterGap: 0.06, MinCluster: 0.02, MinClusterN: 8, EdgeZone: 0.05, SideGap: 0.3, FooterWidth: 0.6, ShadowDelta: 30, FlatMin: 70, FlatWidth: 0.08,
+	ClusterGap: 0.06, MinCluster: 0.02, MinClusterN: 8, EdgeZone: 0.05, SideGap: 0.3, FooterWidth: 0.6, MaxSkew: 5, SkewContrast: 1.6, ShadowDelta: 30, FlatMin: 70, FlatWidth: 0.08,
 }
 
 // Detector implements detect.PageDetector.
@@ -233,6 +235,7 @@ func (d Detector) trace(img *image.Gray, opts detect.Options) (detect.PageResult
 	}
 	onPaper := paperTest(img, otsu(img), p)
 	var rects []geom.Ratios
+	var angles []float64
 	conf := 1.0
 	for _, part := range parts {
 		var in []comp
@@ -246,7 +249,7 @@ func (d Detector) trace(img *image.Gray, opts detect.Options) (detect.PageResult
 		if len(parts) == 2 && (float64(ink) < p.MinHalfInk*float64(total) || len(in) < p.MinHalfComps) {
 			continue // blank side of a spread
 		}
-		bx0, by0, bx1, by1, ok := lineBlock(in, part, [2]int{t, h - bt}, w, h, opts.KeepHeaders, p, tr, onPaper)
+		bx0, by0, bx1, by1, ang, ok := lineBlock(in, part, [2]int{t, h - bt}, w, h, opts.KeepHeaders, p, tr, onPaper)
 		if !ok {
 			continue
 		}
@@ -255,6 +258,7 @@ func (d Detector) trace(img *image.Gray, opts detect.Options) (detect.PageResult
 		bx0, by0 = max(0, bx0-px), max(0, by0-py)
 		bx1, by1 = min(w, bx1+1+px), min(h, by1+1+py)
 		rects = append(rects, geom.FromPixels(float64(bx0), float64(by0), float64(bx1-bx0), float64(by1-by0), w, h))
+		angles = append(angles, ang)
 		conf = math.Min(conf, float64(ink)/float64(total)*float64(len(parts)))
 	}
 	if len(rects) == 0 {
@@ -263,7 +267,7 @@ func (d Detector) trace(img *image.Gray, opts detect.Options) (detect.PageResult
 	if len(parts) == 2 && len(rects) == 1 {
 		notes = "two-page sheet with one blank side"
 	}
-	return detect.PageResult{Rects: rects, Confidence: math.Min(1, conf), Notes: notes}, tr
+	return detect.PageResult{Rects: rects, Angles: angles, Confidence: math.Min(1, conf), Notes: notes}, tr
 }
 
 // dropStripes removes book-edge stripes: narrow fragments (taller than wide)
@@ -707,12 +711,13 @@ func components(mask []bool, w, h int) []comp {
 // group is a set of components joined into one text line (or one figure).
 type group struct {
 	comp
-	n     int
-	ink   int
-	medH  int
-	base  int     // baseline: median bottom of the group's marks ...
-	slope float64 // ... tilting by this much per pixel to the right (skew)
-	items []int
+	n      int
+	ink    int
+	medH   int
+	base   int     // baseline: median bottom of the group's marks ...
+	slope  float64 // ... tilting by this much per pixel to the right (skew)
+	fitted bool    // slope comes from a fit over the whole line
+	items  []int
 }
 
 // baseAt is the group's baseline at column x.
@@ -806,7 +811,7 @@ func lines(cs []comp, p Params) ([]group, int) {
 		sort.Ints(gh)
 		sort.Ints(gb)
 		gs[k].medH, gs[k].base = gh[len(gh)/2], gb[len(gb)/2]
-		gs[k].slope = skew(cs, gs[k], mh)
+		gs[k].slope, gs[k].fitted = skew(cs, gs[k], mh)
 	}
 	return gs, mh
 }
@@ -818,10 +823,11 @@ func lines(cs []comp, p Params) ([]group, int) {
 // join it; specks, scanner dust and the fragments of page edges, which never
 // line up into text, stay out. Falls back to the band method when the part
 // holds no text line.
-func lineBlock(cs []comp, part, usable [2]int, w, h int, keepHeaders bool, p Params, tr *Trace, onPaper func(comp, int) bool) (x0, y0, x1, y1 int, ok bool) {
+func lineBlock(cs []comp, part, usable [2]int, w, h int, keepHeaders bool, p Params, tr *Trace, onPaper func(comp, int) bool) (x0, y0, x1, y1 int, angle float64, ok bool) {
 	gs, mh := lines(cs, p)
 	if mh == 0 {
-		return block(cs, part, w, h, keepHeaders, p)
+		x0, y0, x1, y1, ok = block(cs, part, w, h, keepHeaders, p)
+		return x0, y0, x1, y1, 0, ok
 	}
 	glyphLike := func(g group) bool { return float64(g.medH) >= p.GlyphMin*float64(mh) }
 	// bigMark reports a mark at least size long that is not a sliver
@@ -878,9 +884,10 @@ func lineBlock(cs []comp, part, usable [2]int, w, h int, keepHeaders bool, p Par
 	core = kept
 	if len(core) == 0 {
 		if part[1]-part[0] < w {
-			return 0, 0, 0, 0, false // one side of a spread with no text: blank
+			return 0, 0, 0, 0, 0, false // one side of a spread with no text: blank
 		}
-		return block(cs, part, w, h, keepHeaders, p)
+		x0, y0, x1, y1, ok = block(cs, part, w, h, keepHeaders, p)
+		return x0, y0, x1, y1, 0, ok
 	}
 	// Stray marks that happen to line up (a fragment of the facing page, a
 	// smudge along the border) form small clusters of their own near the top
@@ -1066,9 +1073,16 @@ func lineBlock(cs []comp, part, usable [2]int, w, h int, keepHeaders bool, p Par
 		x1, y1 = max(x1, c.x1), max(y1, c.y1)
 	}
 	if x1 < 0 {
-		return 0, 0, 0, 0, false
+		return 0, 0, 0, 0, 0, false
 	}
-	return x0, y0, x1, y1, true
+	gutter := -1
+	switch {
+	case part[1] < w:
+		gutter = part[1]
+	case part[0] > 0:
+		gutter = part[0]
+	}
+	return x0, y0, x1, y1, textAngle(cs, gs, why, mh, gutter, p), true
 }
 
 // paperTest returns a test for marks that sit on clean paper: the
@@ -1184,29 +1198,86 @@ func flatten(img *image.Gray, p Params) *image.Gray {
 	return out
 }
 
-// skew fits the slope of a text line's baseline from the bottoms of marks
-// that sit on it (descenders and punctuation left out), measured against
-// the group's centre; lines too short to tell get zero.
-func skew(cs []comp, g group, mh int) float64 {
+// skew fits the slope of a text line's baseline (pixels down per pixel to
+// the right) from the bottoms of its marks; lines too short to tell get zero
+// and fitted false.
+func skew(cs []comp, g group, mh int) (float64, bool) {
 	if g.n < 6 || g.x1-g.x0 < 10*mh {
-		return 0
+		return 0, false
 	}
-	cx := float64(g.cx())
-	var sx, sy, sxx, sxy, n float64
+	return fitBaseline(baselinePoints(cs, g, mh, -1, 0), mh)
+}
+
+type point struct{ x, y float64 }
+
+// baselinePoints returns the bottom centres of g's glyph-sized marks; with
+// gutter >= 0 only those in the part of the line farthest from the gutter
+// (share of the line's width), where a book page lies flat.
+func baselinePoints(cs []comp, g group, mh, gutter int, share float64) []point {
+	lo, hi := g.x0, g.x1
+	if gutter >= 0 {
+		span := int(share * float64(g.x1-g.x0))
+		if gutter >= g.x1 { // gutter to the right: keep the left part
+			hi = g.x0 + span
+		} else {
+			lo = g.x1 - span
+		}
+	}
+	var pts []point
 	for _, i := range g.items {
 		c := cs[i]
-		if d := c.y1 - g.base; 3*max(d, -d) > mh {
+		if 2*(c.y1-c.y0+1) >= mh && c.cx() >= lo && c.cx() <= hi {
+			pts = append(pts, point{float64(c.cx()), float64(c.y1)})
+		}
+	}
+	return pts
+}
+
+// fitBaseline is a Theil-Sen estimate of the slope through pts, robust to
+// descenders and punctuation, refined by least squares on the points that
+// sit on the line it found.
+func fitBaseline(pts []point, mh int) (float64, bool) {
+	if len(pts) < 6 {
+		return 0, false
+	}
+	if len(pts) > 120 { // keep the pair count bounded on very long lines
+		step := float64(len(pts)) / 120
+		sub := make([]point, 0, 120)
+		for k := 0.0; int(k) < len(pts); k += step {
+			sub = append(sub, pts[int(k)])
+		}
+		pts = sub
+	}
+	var slopes []float64
+	for i := range pts {
+		for j := i + 1; j < len(pts); j++ {
+			if dx := pts[j].x - pts[i].x; math.Abs(dx) >= float64(2*mh) {
+				slopes = append(slopes, (pts[j].y-pts[i].y)/dx)
+			}
+		}
+	}
+	if len(slopes) < 10 {
+		return 0, false
+	}
+	sort.Float64s(slopes)
+	sl := slopes[len(slopes)/2]
+	icpt := make([]float64, len(pts))
+	for i, q := range pts {
+		icpt[i] = q.y - sl*q.x
+	}
+	sort.Float64s(icpt)
+	b0 := icpt[len(icpt)/2]
+	var sx, sy, sxx, sxy, n float64
+	for _, q := range pts {
+		if r := q.y - (b0 + sl*q.x); 3*math.Abs(r) > float64(mh) {
 			continue
 		}
-		x, y := float64(c.cx())-cx, float64(c.y1-g.base)
-		sx, sy, sxx, sxy, n = sx+x, sy+y, sxx+x*x, sxy+x*y, n+1
+		sx, sy, sxx, sxy, n = sx+q.x, sy+q.y, sxx+q.x*q.x, sxy+q.x*q.y, n+1
 	}
-	den := n*sxx - sx*sx
-	if n < 6 || den == 0 {
-		return 0
+	if den := n*sxx - sx*sx; n >= 6 && den != 0 {
+		sl = (n*sxy - sx*sy) / den
 	}
-	sl := (n*sxy - sx*sy) / den
-	return math.Max(-0.05, math.Min(0.05, sl)) // at most about 3 degrees
+	return math.Max(-0.09, math.Min(0.09, sl)), true // at most about 5 degrees
 }
 
 // heights returns the sorted heights of components at least 3 pixels tall.
@@ -1219,4 +1290,79 @@ func heights(cs []comp) []int {
 	}
 	sort.Ints(hs)
 	return hs
+}
+
+// textAngle is the skew of a block in degrees, as the counterclockwise turn
+// that straightens it. It projects the bottom centres of the glyphs of the
+// block's core text lines along each candidate angle and keeps the angle at
+// which they pile up most sharply into baselines (a projection-profile
+// search, which ink bridging two lines cannot fool). On one side of an open
+// book only the outer 60% of the block is used, because pages curl towards
+// the gutter. Zero when the block holds too little text or the best angle is
+// barely better than the others (pictures, warped pages).
+func textAngle(cs []comp, gs []group, why []string, mh, gutter int, p Params) float64 {
+	x0, x1 := math.MaxInt, -1
+	for k, g := range gs {
+		if why[k] == "core" {
+			x0, x1 = min(x0, g.x0), max(x1, g.x1)
+		}
+	}
+	if x1 < 0 {
+		return 0
+	}
+	lo, hi := x0, x1
+	if gutter >= 0 {
+		span := int(0.6 * float64(x1-x0))
+		if gutter >= x1 {
+			hi = x0 + span
+		} else {
+			lo = x1 - span
+		}
+	}
+	var pts []point
+	lines := 0
+	for k, g := range gs {
+		if why[k] != "core" || g.n < 3 {
+			continue
+		}
+		lines++
+		for _, i := range g.items {
+			c := cs[i]
+			if ch := c.y1 - c.y0 + 1; 2*ch >= mh && ch <= 2*mh && c.cx() >= lo && c.cx() <= hi {
+				pts = append(pts, point{float64(c.cx() - lo), float64(c.y1)})
+			}
+		}
+	}
+	if lines < 4 || len(pts) < 60 || hi-lo < 15*mh {
+		return 0
+	}
+	score := func(slope float64) float64 {
+		bins := map[int]int{}
+		for _, q := range pts {
+			bins[int(math.Floor(q.y-slope*q.x))]++
+		}
+		s := 0.0
+		for _, n := range bins {
+			s += float64(n * n)
+		}
+		return s
+	}
+	maxSlope := math.Tan(p.MaxSkew * math.Pi / 180)
+	best, bestScore, sum, cnt := 0.0, -1.0, 0.0, 0
+	for sl := -maxSlope; sl <= maxSlope+1e-9; sl += 0.0035 { // about 0.2 degrees
+		v := score(sl)
+		sum, cnt = sum+v, cnt+1
+		if v > bestScore {
+			best, bestScore = sl, v
+		}
+	}
+	if bestScore < p.SkewContrast*sum/float64(cnt) {
+		return 0
+	}
+	for sl := best - 0.004; sl <= best+0.004; sl += 0.0003 {
+		if v := score(sl); v > bestScore {
+			best, bestScore = sl, v
+		}
+	}
+	return math.Atan(best) * 180 / math.Pi
 }

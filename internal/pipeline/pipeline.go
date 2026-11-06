@@ -127,8 +127,12 @@ func (r *Result) Definition(opts detect.Options, excluded map[int]bool) (*cropde
 			if d.PageOverrides == nil {
 				d.PageOverrides = map[int][]cropdef.Rect{}
 			}
-			for _, rr := range rs {
-				d.PageOverrides[p] = append(d.PageOverrides[p], cropdef.FromRatios(rr))
+			for i, rr := range rs {
+				cr := cropdef.FromRatios(rr)
+				if as := c.Candidate.PerPageAngles[p]; i < len(as) {
+					cr.Angle = as[i]
+				}
+				d.PageOverrides[p] = append(d.PageOverrides[p], cr)
 			}
 		}
 		d.Clusters = append(d.Clusters, cd)

@@ -328,3 +328,37 @@ func TestExitCodes(t *testing.T) {
 		}
 	}
 }
+
+// --normalize gives every output page of the same source size one size;
+// --straighten and --ocr leave a born-digital book alone.
+func TestCropNormalize(t *testing.T) {
+	src := copyPDF(t, "book300.pdf")
+	dst := filepath.Join(t.TempDir(), "out.pdf")
+	code, out, errs := runCLI(t, "crop", src, "-o", dst, "--normalize", "--straighten", "--ocr", "--json")
+	mustOK(t, code, out, errs)
+	var rep struct {
+		Straightened int  `json:"straightened"`
+		Normalized   bool `json:"normalized"`
+		OCRPages     int  `json:"ocr_pages"`
+	}
+	if err := json.Unmarshal([]byte(out), &rep); err != nil || !rep.Normalized || rep.Straightened != 0 || rep.OCRPages != 0 {
+		t.Fatalf("report %+v %v\n%s", rep, err, out)
+	}
+	eng, err := pdf.NewEngine(pdf.EngineOptions{Workers: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer eng.Close()
+	doc, err := eng.Open(context.Background(), dst, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sizes := map[[2]int]int{}
+	for _, p := range doc.Pages {
+		sizes[[2]int{int(math.Round(p.Width)), int(math.Round(p.Height))}]++
+	}
+	// portrait odd, portrait even and the landscape spreads: at most a few sizes
+	if len(sizes) > 4 {
+		t.Fatalf("too many page sizes after --normalize: %v", sizes)
+	}
+}

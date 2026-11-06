@@ -22,11 +22,11 @@ func (e *Engine) PageText(ctx context.Context, doc *Document, page int) (string,
 		return "", nil, err
 	}
 	defer inst.Close()
-	ref, err := openDoc(inst, doc.Path, doc.password)
+	ref, done, err := openDoc(inst, doc.Path, doc.password)
 	if err != nil {
 		return "", nil, err
 	}
-	defer inst.FPDF_CloseDocument(&requests.FPDF_CloseDocument{Document: ref})
+	defer done()
 	if page < 0 || page >= len(doc.Pages) {
 		return "", nil, fmt.Errorf("pdf: page %d out of range", page+1)
 	}

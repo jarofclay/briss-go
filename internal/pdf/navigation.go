@@ -37,11 +37,11 @@ func (e *Engine) Navigation(ctx context.Context, doc *Document) (*Navigation, er
 		return nil, err
 	}
 	defer inst.Close()
-	ref, err := openDoc(inst, doc.Path, doc.password)
+	ref, done, err := openDoc(inst, doc.Path, doc.password)
 	if err != nil {
 		return nil, err
 	}
-	defer inst.FPDF_CloseDocument(&requests.FPDF_CloseDocument{Document: ref})
+	defer done()
 	nav := &Navigation{NamedDests: map[string]int{}}
 
 	destPage := func(d *references.FPDF_DEST) int {

@@ -37,6 +37,7 @@ type Job struct {
 	caption  string
 	analysis *app.Analysis
 	settings Settings
+	err      error // why it failed, in full
 	row      *jobRow
 }
 
@@ -145,6 +146,7 @@ func (j *Job) finish(caption string) {
 }
 
 func (j *Job) fail(err error) {
+	j.err = err
 	msg := err.Error()
 	switch {
 	case errors.Is(err, pdf.ErrPasswordRequired):

@@ -154,22 +154,40 @@ func (e *Engine) instance(ctx context.Context) (pdfium.Pdfium, error) {
 	return e.pool.GetInstanceWithContext(ctx)
 }
 
-func openDoc(inst pdfium.Pdfium, path, password string) (references.FPDF_DOCUMENT, error) {
-	req := &requests.OpenDocument{FilePath: &path}
+// openDoc opens path in an engine instance and returns a function that
+// closes it again. PDFium reads the file through Go (a reader on an open
+// file) rather than by path: the WebAssembly sandbox sees only one mounted
+// drive on Windows and no Windows-style paths at all.
+func openDoc(inst pdfium.Pdfium, path, password string) (references.FPDF_DOCUMENT, func(), error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", nil, fmt.Errorf("pdf: opening %s: %w", path, err)
+	}
+	st, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return "", nil, fmt.Errorf("pdf: opening %s: %w", path, err)
+	}
+	req := &requests.OpenDocument{FileReader: f, FileReaderSize: st.Size()}
 	if password != "" {
 		req.Password = &password
 	}
 	res, err := inst.OpenDocument(req)
 	if err != nil {
+		f.Close()
 		if errors.Is(err, pdfiumerrors.ErrPassword) {
 			if password == "" {
-				return "", ErrPasswordRequired
+				return "", nil, ErrPasswordRequired
 			}
-			return "", ErrBadPassword
+			return "", nil, ErrBadPassword
 		}
-		return "", fmt.Errorf("pdf: opening %s: %w", path, err)
+		return "", nil, fmt.Errorf("pdf: opening %s: %w", path, err)
 	}
-	return res.Document, nil
+	doc := res.Document
+	return doc, func() {
+		inst.FPDF_CloseDocument(&requests.FPDF_CloseDocument{Document: doc})
+		f.Close()
+	}, nil
 }
 
 // Open reads the page sizes of a document. password may be empty.
@@ -179,11 +197,11 @@ func (e *Engine) Open(ctx context.Context, path, password string) (*Document, er
 		return nil, err
 	}
 	defer inst.Close()
-	ref, err := openDoc(inst, path, password)
+	ref, done, err := openDoc(inst, path, password)
 	if err != nil {
 		return nil, err
 	}
-	defer inst.FPDF_CloseDocument(&requests.FPDF_CloseDocument{Document: ref})
+	defer done()
 	pc, err := inst.FPDF_GetPageCount(&requests.FPDF_GetPageCount{Document: ref})
 	if err != nil {
 		return nil, fmt.Errorf("pdf: page count: %w", err)
@@ -263,11 +281,11 @@ func (e *Engine) renderWorker(ctx context.Context, doc *Document, jobs <-chan Re
 		return err
 	}
 	defer inst.Close()
-	ref, err := openDoc(inst, doc.Path, doc.password)
+	ref, done, err := openDoc(inst, doc.Path, doc.password)
 	if err != nil {
 		return err
 	}
-	defer inst.FPDF_CloseDocument(&requests.FPDF_CloseDocument{Document: ref})
+	defer done()
 	for j := range jobs {
 		if ctx.Err() != nil {
 			continue

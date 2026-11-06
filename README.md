@@ -114,7 +114,7 @@ on its own; other languages than English need their Tesseract language packs.
 the app draws its window with OpenGL through [Fyne](https://fyne.io):
 
 - macOS: `xcode-select --install` (once);
-- Linux (Debian, Ubuntu): `sudo apt install gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev`;
+- Linux (Debian, Ubuntu): `sudo apt install gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev wayland-protocols`;
 - Windows: a 64-bit GCC such as [MSYS2](https://www.msys2.org)'s `mingw-w64-x86_64-gcc`,
   on the `PATH` (the ready-made download avoids this).
 

@@ -78,7 +78,7 @@ func TestAutoJobWritesOutput(t *testing.T) {
 	fyne.DoAndWait(func() { u.addPaths([]string{src}) })
 	waitFor(t, 60*time.Second, func() bool { return u.jobs[0].state == stateDone || u.jobs[0].state == stateFailed })
 	if j := u.jobs[0]; j.state != stateDone {
-		t.Fatalf("job failed: %s", j.row.caption.Text)
+		t.Fatalf("job failed: %v", j.err)
 	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(src), "book_cropped.pdf")); err != nil {
 		t.Fatal(err)

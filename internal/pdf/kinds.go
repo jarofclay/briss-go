@@ -27,11 +27,11 @@ func (e *Engine) PageKinds(ctx context.Context, doc *Document, pages []int) ([]P
 		return nil, err
 	}
 	defer inst.Close()
-	ref, err := openDoc(inst, doc.Path, doc.password)
+	ref, done, err := openDoc(inst, doc.Path, doc.password)
 	if err != nil {
 		return nil, err
 	}
-	defer inst.FPDF_CloseDocument(&requests.FPDF_CloseDocument{Document: ref})
+	defer done()
 	var out []PageKind
 	for _, p := range pages {
 		if p < 0 || p >= len(doc.Pages) {

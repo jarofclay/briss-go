@@ -29,7 +29,7 @@ decision with its evidence), `spike/RESULTS.md` (measurements), `spike/README.md
 | `internal/app/process.go` | Outputs (straighten re-fit, normalize), AddOCR | Tested |
 | `internal/crop/layer.go` | Content-stream turn about a pivot, invisible Helvetica text layer, also on /Rotate pages | Tested by rendering and text extraction |
 | `internal/ocr`, `internal/raster` | Tesseract finder and TSV reader; image turn and crop | Tested (OCR test skips without Tesseract) |
-| `.github/workflows/gui.yml` | Tests the app and builds Linux, macOS (both CPUs, .app) and Windows downloads on pushes to `claude/gui` and `master` | Steps checked locally (Linux build, shell syntax); not yet run on GitHub |
+| `.github/workflows/gui.yml` | Runs the core and app tests on Linux, macOS and Windows and builds the downloads (Linux tarball, macOS Briss.app zips for Apple silicon and Intel, Windows Briss.exe) on pushes to `claude/gui` and `master` | Green since run 3 (2026-11-06); the first core test runs on macOS and Windows |
 | `internal/detect/cv` | Tier T2 `cv@1` (decision 0010): per-page ink analysis, text lines and figures, two-page split at the gutter; `debug_test.go` (`BRISS_CV_DEBUG="a.png,doc.pdf#3" BRISS_CV_DEBUG_OUT=dir`) draws its decisions, `probe_test.go` lists components and lines in a box | Working, tested; 78.4% of real sheets accepted |
 | `internal/pdf/kinds.go` | Page object census (text and image objects, largest image share) used by `auto` to spot scans | Done |
 | `internal/detect/legacy` | Tier T0, bit-exact port of `CropFinder` and `SplitFinder` | Exact vs Java on Java's overlays |
@@ -85,6 +85,8 @@ tier stays bit-compatible and Java quirks are fixed around it (0009).
 - The community DocLayout-YOLO ONNX export uses Ultralytics metadata (`names`, not `character`) and an end-to-end head; rapid_layout cannot load it, `onnx_eval.py --format yolo-e2e` can. ONNX Runtime dynamic int8 quantization needs `onnx` and `skip_symbolic_shape=True` without `sympy`.
 - Background shell loops started with `&` inside a tool call die when the call returns; use the tool's background mode.
 - Fyne: the software painter (test driver, screenshots) panics on rounded rectangles of negative size, so clamp sizes in custom layouts; containers whose children were shown or hidden need a Refresh on the container; `Driver().AllWindows()` has no fixed order, find windows by title; UI changes from goroutines go through `fyne.Do`.
+- go-pdfium's WebAssembly build mounts only the working folder's drive on Windows and understands no `C:\` paths, so `internal/pdf` hands PDFium a reader on a file opened in Go instead of a path.
+- On arm64 Go fuses `a + b*c` into one rounding; the legacy split needs `a + float32(b*c)` to stay bit-exact with Java.
 - pdfium's structured text boxes are in PDF user space (bottom-left origin, unrotated page), not display coordinates.
 - `crop.Write` creates the output with `os.CreateTemp` (mode 0600); it now copies the source's permissions before the rename.
 - Debug the scan tier on pages rendered by the app's engine (`BRISS_CV_DEBUG="doc.pdf#3"`), not on pypdfium2 renders: the two differ by a grey level or so, and that once moved a gutter decision.
@@ -103,7 +105,7 @@ Reachable: PyPI, the Go module proxy (gitleaks and goreleaser build from it), Ma
 3. **Scan-tier follow-ups**: headers cut by the scan border, fragments in stacked page edges beside left pages, pencil and handwritten marks on title pages (the remaining failures in `spike/RESULTS.md`); light grey figure boxes; then the GUI review strip so a user confirms T2 results. More scans (other books, other scanners) are needed before more tuning, to avoid fitting these ten.
 4. **Phase 3, GUI parity** (PLAN.md section 7.1, as far as decision 0011 wants it): cluster-wide editing in the preview, Load and Save crops, an OCR language picker.
 5. **Phase 4, detection**: tier T1 structural next (T2 is done; T1 decides most born-digital pages), then T3 with the model the real-document bench favours (PP-DocLayoutV2 is fastest; the speed gate needs fewer sampled pages or a smaller input), then T4 by porting `spike/claude` into `internal/detect/claude`, then `auto`, `model pull` and `config` (API key in the OS keychain).
-6. **First CI run.** The workflows only run on `master`; the first push or PR there runs the three-OS test matrix and the gitleaks job for the first time. Windows was checked by cross-compiling and vetting only.
+6. **First CI run of the CLI workflows.** `go.yml` (tests, gitleaks) and `release.yml` only run on `master`; the core tests already pass on all three systems inside `gui.yml`.
 7. Open questions in PLAN.md section 14 ("Jev" is still unidentified).
 
 ## 7. Commands

@@ -430,6 +430,21 @@ func TestAutoRotateSidewaysSpread(t *testing.T) {
 		t.Fatalf("page 1 is not the upright left page (mark not at its top left)")
 	}
 
+	whole := filepath.Join(dir, "whole.pdf")
+	code, out, errs = runCLI(t, "crop", src, "--detector", "cv", "--keep-headers", "--no-auto-split", "-o", whole, "--json")
+	mustOK(t, code, out, errs)
+	rep.OutputPages = 0
+	if err := json.Unmarshal([]byte(out), &rep); err != nil || rep.OutputPages != 1 {
+		t.Fatalf("--no-auto-split must keep the spread as one page: %+v\n%s", rep, out)
+	}
+	cols := filepath.Join(dir, "cols.pdf")
+	code, out, errs = runCLI(t, "crop", src, "--detector", "cv", "--keep-headers", "--no-auto-split", "--split-col", "-o", cols, "--json")
+	mustOK(t, code, out, errs)
+	rep.OutputPages = 0
+	if err := json.Unmarshal([]byte(out), &rep); err != nil || rep.OutputPages != 2 {
+		t.Fatalf("--split-col on a scan must split it: %+v\n%s", rep, out)
+	}
+
 	keep := filepath.Join(dir, "keep.pdf")
 	code, out, errs = runCLI(t, "crop", src, "--detector", "cv", "--keep-headers", "--auto-rotate=false", "-o", keep, "--json")
 	mustOK(t, code, out, errs)

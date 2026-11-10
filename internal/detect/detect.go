@@ -19,6 +19,7 @@ type Options struct {
 	MarginPt     float64 // padding around detected content, in points
 	AutoRotate   bool    // turn pages whose text is sideways or upside down (page detectors)
 	ForceTurn    int     // turn every page clockwise by this instead of judging each (page detectors)
+	NoAutoSplit  bool    // keep two-page sheets and stacked pages as one page (page detectors)
 }
 
 // Request is one cluster to detect.

@@ -25,6 +25,7 @@ type analysisFlags struct {
 	margin        string
 	keepHeaders   bool
 	autoRotate    bool
+	noAutoSplit   bool
 	password      string
 	passwordStdin bool
 	threads       int
@@ -33,8 +34,9 @@ type analysisFlags struct {
 func (f *analysisFlags) register(c *cobra.Command, withPassword bool) {
 	fl := c.Flags()
 	fl.StringVar(&f.detector, "detector", "auto", "detection tier: "+strings.Join(app.Detectors, ", ")+" (auto: cv for scans, legacy otherwise)")
-	fl.BoolVar(&f.splitCol, "split-col", false, "split every rectangle into two columns")
-	fl.BoolVar(&f.splitRow, "split-row", false, "split every rectangle into two rows")
+	fl.BoolVar(&f.splitCol, "split-col", false, "split every page into two columns (on scans, between the text columns)")
+	fl.BoolVar(&f.splitRow, "split-row", false, "split every page into a top and a bottom half (on scans, between lines)")
+	fl.BoolVar(&f.noAutoSplit, "no-auto-split", false, "keep two-page sheets and pages stacked one above the other as one page (scans)")
 	fl.StringVar(&f.exclude, "exclude", "", `pages kept out of clustering, each cropped on its own, e.g. "1-3;10"`)
 	fl.StringVar(&f.margin, "margin", "", `padding around detected content: 3pt, 2mm, 0.1in or 2%`)
 	fl.BoolVar(&f.keepHeaders, "keep-headers", false, "keep running headers, footers and page numbers (no effect on the legacy detector)")
@@ -61,7 +63,7 @@ func (f *analysisFlags) options(stdin io.Reader) (app.Options, error) {
 	}
 	return app.Options{
 		Password: pw, Exclude: f.exclude, Detector: f.detector, Margin: m,
-		Detect: detect.Options{SplitColumns: f.splitCol, SplitRows: f.splitRow, KeepHeaders: f.keepHeaders, AutoRotate: f.autoRotate},
+		Detect: detect.Options{SplitColumns: f.splitCol, SplitRows: f.splitRow, KeepHeaders: f.keepHeaders, AutoRotate: f.autoRotate, NoAutoSplit: f.noAutoSplit},
 	}, nil
 }
 

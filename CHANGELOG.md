@@ -57,6 +57,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   sheets holding two pages one above the other are cut into a top and a bottom page.
 * The desktop app asks for the password of protected PDFs (and again after a wrong
   one), has an Auto-rotate switch (on), and shows turned pages upright in the preview.
+* Split options in the app: "Split two-page sheets" (on) and "Split each page" (Off,
+  Columns, Rows). `--split-col` and `--split-row` now work on scans too (they were
+  ignored by the scan detector): columns are cut between the text columns, rows between
+  lines; `--no-auto-split` keeps two-page sheets together. Normalizing keeps the top and
+  bottom parts of a page apart.
 * `briss preview --crops FILE` draws a saved crop definition (for example a label) on the
   pages without detecting; `crop`, `apply` and `bench --report` create missing output
   folders. The README explains downloading, building and checking labels step by step.

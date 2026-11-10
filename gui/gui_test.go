@@ -32,10 +32,17 @@ func TestSettingsRoundTrip(t *testing.T) {
 	if s != defaultSettings() {
 		t.Fatalf("defaults: %+v", s)
 	}
-	if !s.Normalize || !s.OCR || !s.Straighten || !s.AutoRotate || s.Mode != modeAuto {
-		t.Fatalf("normalise, OCR, straighten and auto-rotate are on by default, mode auto: %+v", s)
+	if !s.Normalize || !s.OCR || !s.Straighten || !s.AutoRotate || !s.SplitSheets || s.SplitPages != splitOff || s.Mode != modeAuto {
+		t.Fatalf("normalise, OCR, straighten, auto-rotate and two-page splitting are on by default, page splits off, mode auto: %+v", s)
 	}
-	s.Mode, s.MarginPt, s.OCR = modePreviewOnly, 12, false
+	o, _ := s.options()
+	if o.Detect.NoAutoSplit || o.Detect.SplitColumns || o.Detect.SplitRows {
+		t.Fatalf("default split options: %+v", o.Detect)
+	}
+	s.Mode, s.MarginPt, s.OCR, s.SplitSheets, s.SplitPages = modePreviewOnly, 12, false, false, splitRows
+	if o, _ := s.options(); !o.Detect.NoAutoSplit || o.Detect.SplitColumns || !o.Detect.SplitRows {
+		t.Fatalf("split options not passed on: %+v", o.Detect)
+	}
 	s.save(a.Preferences())
 	if got := loadSettings(a.Preferences()); got != s {
 		t.Fatalf("got %+v want %+v", got, s)

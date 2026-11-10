@@ -170,6 +170,8 @@ func (u *ui) optionsPanel() *fyne.Container {
 		row(ocrLabel, ocrSwitch),
 		row(label("Straighten"), toggle(&s.Straighten)),
 		row(label("Auto-rotate"), toggle(&s.AutoRotate)),
+		row(label("Split two-page sheets"), toggle(&s.SplitSheets)),
+		row(label("Split each page"), NewSegmented([]string{"Off", "Columns", "Rows"}, s.SplitPages, func(i int) { s.SplitPages = i; save() })),
 		row(label("Keep headers & page numbers"), toggle(&s.KeepHeaders)),
 	)
 	bg := canvas.NewRectangle(colSurface)

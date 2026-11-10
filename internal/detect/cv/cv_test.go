@@ -336,3 +336,55 @@ func TestStackedPages(t *testing.T) {
 		t.Fatalf("a title page is one page: %+v", r)
 	}
 }
+
+// Split options on scans: columns cut between the text columns, rows cut
+// between lines, both give four parts in reading order, and NoAutoSplit
+// keeps a two-page sheet as one page.
+func TestSplitOptions(t *testing.T) {
+	const w, h = 900, 1200
+	s := newSheet(w, h, 31)
+	s.text(80, 100, 420, 1100, 11, 7)  // left column
+	s.text(480, 100, 820, 1100, 11, 7) // right column
+	cols := New().DetectPage(s.g, detect.Options{KeepHeaders: true, SplitColumns: true})
+	if len(cols.Rects) != 2 {
+		t.Fatalf("columns: %+v", cols)
+	}
+	near(t, "left column", px(cols.Rects[0], w, h), [4]int{80, 100, 420, lastLine(100, 1100, 11, 7)}, 6)
+	near(t, "right column", px(cols.Rects[1], w, h), [4]int{480, 100, 820, lastLine(100, 1100, 11, 7)}, 6)
+
+	rows := New().DetectPage(s.g, detect.Options{KeepHeaders: true, SplitRows: true})
+	if len(rows.Rects) != 2 {
+		t.Fatalf("rows: %+v", rows)
+	}
+	top, bottom := px(rows.Rects[0], w, h), px(rows.Rects[1], w, h)
+	// the cut lies in a gap between lines: no line belongs to both parts
+	pad := 0.003 * h
+	cutTop, cutBottom := top[3]-pad, bottom[1]+pad
+	for y := 100; y+11 <= 1100; y += 18 {
+		inTop := float64(y) < cutTop
+		inBottom := float64(y+11) > cutBottom
+		if inTop && inBottom {
+			t.Fatalf("line at %d is cut: top part ends %v, bottom starts %v", y, cutTop, cutBottom)
+		}
+	}
+	if top[3] > 0.7*h || bottom[1] < 0.3*h {
+		t.Fatalf("row cut not near the middle: %v %v", top, bottom)
+	}
+
+	both := New().DetectPage(s.g, detect.Options{KeepHeaders: true, SplitColumns: true, SplitRows: true})
+	if len(both.Rects) != 4 || both.Rects[0].L > 0.2 || both.Rects[1].L > 0.2 || both.Rects[2].L < 0.4 || both.Rects[0].T > both.Rects[1].T {
+		t.Fatalf("both: want left-top, left-bottom, right-top, right-bottom: %+v", both.Rects)
+	}
+
+	spread := newSheet(1100, 850, 32)
+	spread.text(90, 110, 505, 760, 10, 5)
+	spread.text(620, 110, 1040, 700, 10, 5)
+	if r := New().DetectPage(spread.g, detect.Options{KeepHeaders: true}); len(r.Rects) != 2 {
+		t.Fatalf("a spread splits by default: %+v", r)
+	}
+	one := New().DetectPage(spread.g, detect.Options{KeepHeaders: true, NoAutoSplit: true})
+	if len(one.Rects) != 1 {
+		t.Fatalf("NoAutoSplit keeps the spread whole: %+v", one)
+	}
+	near(t, "whole spread", px(one.Rects[0], 1100, 850), [4]int{90, 110, 1040, lastLine(110, 760, 10, 5)}, 6)
+}

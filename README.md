@@ -44,8 +44,10 @@ this page).
   in reading order. Pages with too little text to judge (covers, pictures) are turned
   like the other pages of the scan.
 - **Born-digital PDFs** (ebooks, papers): the original Briss auto-crop (`legacy`).
-- **Splitting**: `--split-col` and `--split-row` cut every page into two columns or two
-  halves; one output page per rectangle, in reading order.
+- **Splitting**: `--split-col` and `--split-row` cut every page into two columns or a top
+  and a bottom half; one output page per part, in reading order. On scans the cut goes
+  between the text columns, or between lines, so no line is cut in half.
+  `--no-auto-split` keeps two-page sheets together.
 - **Keeps the document working**: outlines (bookmarks), links, named destinations and
   encryption survive cropping and splitting.
 - **Straighten** (`--straighten`): scanned pages that lean are turned level, page by
@@ -88,6 +90,8 @@ The sliders button at the top right opens the options (remembered between runs):
 | Selectable text (OCR) | on | Adds a searchable text layer to scanned pages. Needs Tesseract; without it the switch is greyed out with a link to the installer |
 | Straighten | on | Turns leaning scanned pages level |
 | Auto-rotate | on | Turns sideways or upside-down scans upright, before splitting two-page spreads |
+| Split two-page sheets | on | Cuts a scanned two-page spread into its left and right page (and a sheet of two pages one above the other into a top and a bottom page). Off keeps every sheet as one page |
+| Split each page | Off | **Columns** cuts every page into its left and right column, **Rows** into a top and a bottom half, for reading on a small screen |
 | Keep headers & page numbers | on | Keeps running headers, footers and page numbers inside the crop |
 
 A **password-protected PDF** waits with a lock button and asks for its password; a wrong
@@ -278,7 +282,8 @@ each rectangle is numbered in output order (1 = left page of a two-page sheet).
 | `--detector auto\|legacy\|cv` | How to find the content: `auto` (default) uses `cv` for scanned PDFs and `legacy` otherwise |
 | `--keep-headers` | Keep running headers, footers and page numbers |
 | `--margin 3pt` | Extra margin around the content: `pt`, `mm`, `in` or `%` |
-| `--split-col`, `--split-row` | Split every rectangle into two columns or two rows |
+| `--split-col`, `--split-row` | Split every page into two columns, or a top and a bottom half |
+| `--no-auto-split` | Keep two-page sheets (and pages stacked one above the other) as one page |
 | `--straighten` | Turn leaning scanned pages level |
 | `--auto-rotate` | Turn sideways or upside-down scanned pages upright (on by default; `--auto-rotate=false` to keep them as stored) |
 | `--normalize` | Give every output page of a kind the same size |

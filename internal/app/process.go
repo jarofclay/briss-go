@@ -109,14 +109,22 @@ func normalize(outs map[int][]crop.Output, pages []pdf.PageInfo) {
 		}
 	}
 	type ref struct{ page, idx int }
-	groups := map[[3]int][]ref{}
+	groups := map[[4]int][]ref{}
+	// over reports whether a and b share some of their extent along one axis
+	over := func(a0, a1, b0, b1 float64) bool { return a0 < b1 && b0 < a1 }
 	for p, vs := range views {
 		for i, v := range vs {
 			side := 0 // a portrait page is one page; a landscape sheet has a left and a right one
 			if v.pw > 1.1*v.ph && (v.r.L+1-v.r.R)/2 >= 0.5 {
 				side = 1
 			}
-			k := [3]int{int(math.Round(v.pw / 10)), int(math.Round(v.ph / 10)), side}
+			lower := 0 // the bottom part of a page split into rows
+			for j, n := range vs {
+				if j != i && over(v.r.L, 1-v.r.R, n.r.L, 1-n.r.R) && 1-n.r.B <= v.r.T+1e-9 {
+					lower = 1
+				}
+			}
+			k := [4]int{int(math.Round(v.pw / 10)), int(math.Round(v.ph / 10)), side, lower}
 			groups[k] = append(groups[k], ref{p, i})
 		}
 	}
@@ -135,17 +143,29 @@ func normalize(outs map[int][]crop.Output, pages []pdf.PageInfo) {
 			v := vs[r.idx]
 			x0, x1 := v.r.L*v.pw, (1-v.r.R)*v.pw
 			y0, y1 := v.r.T*v.ph, (1-v.r.B)*v.ph
-			lo, hi := 0.0, v.pw // room: half way to the neighbours on the sheet
+			// room: half way to the neighbours beside, above and below it
+			lo, hi, loY, hiY := 0.0, v.pw, 0.0, v.ph
 			for j, n := range vs {
 				if j == r.idx {
 					continue
 				}
 				nx0, nx1 := n.r.L*v.pw, (1-n.r.R)*v.pw
-				if nx1 <= x0 {
-					lo = math.Max(lo, (nx1+x0)/2)
+				ny0, ny1 := n.r.T*v.ph, (1-n.r.B)*v.ph
+				if over(y0, y1, ny0, ny1) { // beside
+					if nx1 <= x0 {
+						lo = math.Max(lo, (nx1+x0)/2)
+					}
+					if nx0 >= x1 {
+						hi = math.Min(hi, (x1+nx0)/2)
+					}
 				}
-				if nx0 >= x1 {
-					hi = math.Min(hi, (x1+nx0)/2)
+				if over(x0, x1, nx0, nx1) { // above or below
+					if ny1 <= y0 {
+						loY = math.Max(loY, (ny1+y0)/2)
+					}
+					if ny0 >= y1 {
+						hiY = math.Min(hiY, (y1+ny0)/2)
+					}
 				}
 			}
 			nx0, nx1 := fit((x0+x1)/2-tw/2, tw, lo, hi)
@@ -158,7 +178,7 @@ func normalize(outs map[int][]crop.Output, pages []pdf.PageInfo) {
 			default:
 				ny0 = (y0+y1)/2 - th/2
 			}
-			ny0, ny1 := fit(ny0, th, 0, v.ph)
+			ny0, ny1 := fit(ny0, th, loY, hiY)
 			nr := geom.Ratios{L: nx0 / v.pw, R: 1 - nx1/v.pw, T: ny0 / v.ph, B: 1 - ny1/v.ph}
 			if nr.Valid() {
 				o := &outs[r.page][r.idx]

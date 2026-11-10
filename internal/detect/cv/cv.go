@@ -304,13 +304,13 @@ func (d Detector) trace(img *image.Gray, opts detect.Options) (detect.PageResult
 	}
 	parts := [][2]int{{0, w}}
 	notes := ""
-	if float64(w) > p.TwoUpAspect*float64(h) {
+	if !opts.NoAutoSplit && float64(w) > p.TwoUpAspect*float64(h) {
 		if split, ok := gutter(kept, img, t, h-bt, p); ok {
 			parts = [][2]int{{0, split}, {split, w}}
 			notes = "two-page sheet"
 		}
 	}
-	if len(parts) == 1 && !d.noRowSplit && float64(h) > p.TwoUpAspect*float64(w) {
+	if len(parts) == 1 && !d.noRowSplit && !opts.NoAutoSplit && float64(h) > p.TwoUpAspect*float64(w) {
 		if split, ok := rowGutter(kept, w, h, t, h-bt, p); ok {
 			tr.RowSplit = split
 			return detect.PageResult{}, tr
@@ -343,10 +343,12 @@ func (d Detector) trace(img *image.Gray, opts detect.Options) (detect.PageResult
 		}
 		tr.Blocks = append(tr.Blocks, [4]int{bx0, by0, bx1, by1})
 		px, py := int(p.Pad*float64(w)), int(p.Pad*float64(h))
-		bx0, by0 = max(0, bx0-px), max(0, by0-py)
-		bx1, by1 = min(w, bx1+1+px), min(h, by1+1+py)
-		rects = append(rects, geom.FromPixels(float64(bx0), float64(by0), float64(bx1-bx0), float64(by1-by0), w, h))
-		angles = append(angles, ang)
+		for _, b := range splitBlock([4]int{bx0, by0, bx1, by1}, in, opts) {
+			x0, y0 := max(0, b[0]-px), max(0, b[1]-py)
+			x1, y1 := min(w, b[2]+1+px), min(h, b[3]+1+py)
+			rects = append(rects, geom.FromPixels(float64(x0), float64(y0), float64(x1-x0), float64(y1-y0), w, h))
+			angles = append(angles, ang)
+		}
 		conf = math.Min(conf, float64(ink)/float64(total)*float64(len(parts)))
 	}
 	if len(rects) == 0 {

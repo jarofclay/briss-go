@@ -66,3 +66,23 @@ func TestOutputAtFollowsTheTurn(t *testing.T) {
 		t.Fatal("unturned membership wrong")
 	}
 }
+
+// Pages split into a top and a bottom part keep apart when normalised, and
+// top parts are sized with top parts.
+func TestNormalizeRows(t *testing.T) {
+	pages := []pdf.PageInfo{{Width: 600, Height: 900}, {Width: 600, Height: 900}}
+	outs := map[int][]crop.Output{
+		1: {{Rect: geom.Ratios{L: 0.1, R: 0.1, T: 0.08, B: 0.52}}, {Rect: geom.Ratios{L: 0.1, R: 0.1, T: 0.5, B: 0.1}}},
+		2: {{Rect: geom.Ratios{L: 0.12, R: 0.1, T: 0.08, B: 0.55}}, {Rect: geom.Ratios{L: 0.1, R: 0.12, T: 0.47, B: 0.3}}},
+	}
+	normalize(outs, pages)
+	for p, os := range outs {
+		if 1-os[0].Rect.B > os[1].Rect.T+1e-9 {
+			t.Fatalf("page %d: top part runs into the bottom part: %+v", p, os)
+		}
+	}
+	h := func(r geom.Ratios) float64 { return 1 - r.T - r.B }
+	if math.Abs(h(outs[1][0].Rect)-h(outs[2][0].Rect)) > 1e-9 {
+		t.Fatalf("top parts differ in height: %+v %+v", outs[1][0].Rect, outs[2][0].Rect)
+	}
+}

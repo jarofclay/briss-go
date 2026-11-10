@@ -106,7 +106,7 @@ Reachable: PyPI, the Go module proxy (gitleaks and goreleaser build from it), Ma
 3. **Scan-tier follow-ups**: headers cut by the scan border, fragments in stacked page edges beside left pages, pencil and handwritten marks on title pages (the remaining failures in `spike/RESULTS.md`); light grey figure boxes; then the GUI review strip so a user confirms T2 results. More scans (other books, other scanners) are needed before more tuning, to avoid fitting these ten.
 4. **Phase 3, GUI parity** (PLAN.md section 7.1, as far as decision 0011 wants it): cluster-wide editing in the preview, Load and Save crops, an OCR language picker.
 5. **Phase 4, detection**: tier T1 structural next (T2 is done; T1 decides most born-digital pages), then T3 with the model the real-document bench favours (PP-DocLayoutV2 is fastest; the speed gate needs fewer sampled pages or a smaller input), then T4 by porting `spike/claude` into `internal/detect/claude`, then `auto`, `model pull` and `config` (API key in the OS keychain).
-6. **First CI run of the CLI workflows.** `go.yml` (tests, gitleaks) and `release.yml` only run on `master`; the core tests already pass on all three systems inside `gui.yml`.
+6. **Watch the CLI workflows.** `go.yml` (tests on three systems, gitleaks) first ran on the 2.0 beta pull request; one Linux attempt there failed while downloading modules from the Go proxy, a network error rather than a test failure, so re-run a job that fails that way before looking at the code. `release.yml` first runs on the `v2.0.0-beta` tag; if a later tag fails there, check the goreleaser log before the code.
 7. Open questions in PLAN.md section 14 ("Jev" is still unidentified).
 
 ## 7. Commands

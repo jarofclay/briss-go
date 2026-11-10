@@ -1,0 +1,7 @@
+# Optional local hook: `pip install pre-commit && pre-commit install` runs
+# gitleaks with .gitleaks.toml before every commit (docs/decisions/0007-secrets.md).
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks

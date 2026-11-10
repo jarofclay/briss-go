@@ -16,3 +16,23 @@ hs_err_pid*
 # Gradle
 .gradle/
 build/
+# secrets: API keys are passed through the environment only, never committed
+.env
+.env.*
+*.env
+*.key
+secrets/
+
+# Go build output
+/briss
+/briss.exe
+.wazero-cache/
+/briss-ci
+/briss-ci.exe
+/dist/
+
+# review output from the README's label checks (page images of private scans)
+/review/
+/check/
+*_preview/
+*_cropped.pdf

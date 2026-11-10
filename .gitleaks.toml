@@ -1,0 +1,14 @@
+# Secret scanning for this public fork (docs/decisions/0007-secrets.md).
+# Extends the gitleaks defaults with a rule for every Anthropic key prefix:
+# the default rule only matches API keys (sk-ant-api03-...), not user or other
+# key kinds such as sk-ant-usr-...
+title = "briss-go"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "anthropic-any-key"
+description = "Anthropic key of any kind (sk-ant-<kind>-...)"
+regex = '''\bsk-ant-[a-z]{2,10}[0-9]{0,2}-[A-Za-z0-9_\-]{40,}'''
+keywords = ["sk-ant-"]

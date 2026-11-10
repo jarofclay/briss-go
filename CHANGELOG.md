@@ -23,7 +23,55 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+
+## [2.0-beta] - 2026-11-10
+Briss rewritten in Go: a dark drop-and-go desktop app and a command line, with automatic
+crop detection for scanned books (two-page spreads, binding shadows, page edges),
+straightening, auto-rotation, same-size pages and a selectable OCR text layer. The Java
+Briss 2.0 alpha stays in `legacy-java/`.
+
 * [Issue-91] Migrate from JPedal to Apache PDFBox since the former has been removed from public repositories.
+* The Java sources moved to `legacy-java/`; build there with `./gradlew shadowDistZip`.
+* Go rewrite, phase 1: `cmd/briss` with the legacy command line (`-s`, `-d`, `-p`,
+  `--split-col`, `--split-row`), PDFium as WebAssembly, pdfcpu writer that keeps outlines,
+  named destinations and links on cropped and split pages. Differences from the Java
+  version: pages cluster within a 10 pt size window instead of 20 pt bins and by their
+  displayed size; a degenerate auto-crop keeps the page whole; `-d` accepts a directory.
+* Go rewrite, phase 2: subcommands `crop`, `detect`, `apply`, `preview`, `bench` and
+  `version`; crop definitions can be saved, edited and applied (`--save-crops`,
+  `--crops`); `--exclude`, `--margin`, `--password-stdin`, `--dry-run` and `--json`;
+  `briss bench` scores detectors against labelled PDFs (`docs/datasets.md`); release
+  archives from goreleaser for Linux, macOS and Windows on amd64 and arm64; CI on all
+  three systems and a gitleaks secret scan.
+* Go rewrite, scan detector: `--detector cv` finds the content of every scanned page on
+  its own (ink mask with binding shadows flattened, scanner borders, page edges and dust
+  removed, text lines and figures grouped, page numbers and headings joined) and splits
+  two-page sheets at the gutter; `auto` uses it for scanned PDFs. `briss preview --pages`
+  draws on the pages themselves. `briss bench` runs detectors with the label's
+  `keep_headers` setting and scores precomputed predictions with `--detectors dir:PATH`.
+* Desktop app (`gui/`, branch `claude/gui`): a dark, minimal window with a drop zone;
+  files are cropped automatically, or reviewed first in a preview window with draggable
+  crop boxes and the resulting pages beside them. Options: mode (auto, preview, preview
+  only), margin, same page size, OCR, straighten, keep headers. CI builds it for Linux,
+  macOS and Windows.
+* `crop` and `apply` take `--straighten` (scanned pages turned level), `--normalize`
+  (one size for every output page of a kind) and `--ocr` / `--ocr-lang` (invisible text
+  layer from Tesseract). Output files get the source file's permissions.
+* Auto-rotate (on by default, `--auto-rotate=false` to turn off): scanned pages stored
+  sideways or upside down are turned upright before detection, so a sideways two-page
+  spread becomes its left and right page; undecided pages follow the rest of their
+  group; turns are saved as `turn` in crop definitions and written as `/Rotate`. Tall
+  sheets holding two pages one above the other are cut into a top and a bottom page.
+* The desktop app asks for the password of protected PDFs (and again after a wrong
+  one), has an Auto-rotate switch (on), and shows turned pages upright in the preview.
+* Split options in the app: "Split two-page sheets" (on) and "Split each page" (Off,
+  Columns, Rows). `--split-col` and `--split-row` now work on scans too (they were
+  ignored by the scan detector): columns are cut between the text columns, rows between
+  lines; `--no-auto-split` keeps two-page sheets together. Normalizing keeps the top and
+  bottom parts of a page apart.
+* `briss preview --crops FILE` draws a saved crop definition (for example a label) on the
+  pages without detecting; `crop`, `apply` and `bench --report` create missing output
+  folders. The README explains downloading, building and checking labels step by step.
 
 ## [2.0-alpha 5]
 

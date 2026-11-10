@@ -1,0 +1,115 @@
+# Desktop app: test it, then build ready-to-run downloads for Linux, macOS
+# (Apple silicon and Intel) and Windows. On a v* tag the downloads are also
+# attached to the release goreleaser drafts for that tag (release.yml). Fyne needs cgo and OpenGL headers,
+# which the runners have (Linux gets them from apt), so people who only want
+# to use Briss do not have to install a C compiler. Find the files under
+# Actions > GUI > the latest run > Artifacts.
+
+name: GUI
+
+on:
+  push:
+    branches: [master, claude/gui]
+    tags: ["v*"] # path filters are not applied to tag pushes
+    paths: ["gui/**", "internal/**", "go.mod", "go.sum", ".github/workflows/gui.yml"]
+  pull_request:
+    branches: [master]
+    paths: ["gui/**", "internal/**", "go.mod", "go.sum", ".github/workflows/gui.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: Briss-linux-amd64
+          - os: macos-latest
+            artifact: Briss-macos
+          - os: windows-latest
+            artifact: Briss-windows-amd64
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write # to attach the downloads to a tagged release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            gui/go.sum
+      - name: Linux build packages
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev wayland-protocols
+      - name: Test the core
+        run: go test ./...
+      - name: Test the app
+        working-directory: gui
+        run: go test ./...
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
+        working-directory: gui
+        run: |
+          mkdir -p ../dist/Briss
+          go build -trimpath -ldflags "-s -w" -o ../dist/Briss/briss-gui .
+          cp ../LICENSE.txt ../dist/Briss/
+          tar -C ../dist -czf ../dist/${{ matrix.artifact }}.tar.gz Briss
+      - name: Build (macOS app, Apple silicon and Intel)
+        if: runner.os == 'macOS'
+        working-directory: gui
+        run: |
+          for arch in arm64 amd64; do
+            app=../dist/$arch/Briss.app
+            mkdir -p "$app/Contents/MacOS"
+            CGO_ENABLED=1 GOARCH=$arch go build -trimpath -ldflags "-s -w" -o "$app/Contents/MacOS/Briss" .
+            cat > "$app/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleName</key><string>Briss</string>
+            <key>CFBundleExecutable</key><string>Briss</string>
+            <key>CFBundleIdentifier</key><string>io.github.jarofclay.briss</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>2.0.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+            <key>CFBundleDocumentTypes</key><array><dict>
+              <key>CFBundleTypeExtensions</key><array><string>pdf</string></array>
+              <key>CFBundleTypeRole</key><string>Viewer</string>
+            </dict></array>
+          </dict></plist>
+          PLIST
+            suffix=$([ $arch = arm64 ] && echo apple-silicon || echo intel)
+            (cd ../dist/$arch && ditto -c -k --keepParent Briss.app ../Briss-macos-$suffix.zip)
+          done
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        working-directory: gui
+        shell: bash
+        run: |
+          mkdir -p ../dist
+          go build -trimpath -ldflags "-H windowsgui -s -w" -o ../dist/Briss.exe .
+          cd ../dist && 7z a -tzip Briss-windows-amd64.zip Briss.exe ../LICENSE.txt
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          files=(dist/*.tar.gz dist/*.zip)
+          # goreleaser creates the (draft) release; wait for it
+          for i in $(seq 1 90); do
+            gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && break
+            sleep 10
+          done
+          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.exe
+          if-no-files-found: error

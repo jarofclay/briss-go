@@ -20,11 +20,12 @@ type Settings struct {
 	Normalize   bool
 	OCR         bool
 	Straighten  bool
+	AutoRotate  bool
 	KeepHeaders bool
 }
 
 func defaultSettings() Settings {
-	return Settings{Mode: modeAuto, MarginPt: 6, Normalize: true, OCR: true, Straighten: true, KeepHeaders: true}
+	return Settings{Mode: modeAuto, MarginPt: 6, Normalize: true, OCR: true, Straighten: true, AutoRotate: true, KeepHeaders: true}
 }
 
 func loadSettings(p fyne.Preferences) Settings {
@@ -35,6 +36,7 @@ func loadSettings(p fyne.Preferences) Settings {
 		Normalize:   p.BoolWithFallback("normalize", d.Normalize),
 		OCR:         p.BoolWithFallback("ocr", d.OCR),
 		Straighten:  p.BoolWithFallback("straighten", d.Straighten),
+		AutoRotate:  p.BoolWithFallback("auto_rotate", d.AutoRotate),
 		KeepHeaders: p.BoolWithFallback("keep_headers", d.KeepHeaders),
 	}
 }
@@ -45,6 +47,7 @@ func (s Settings) save(p fyne.Preferences) {
 	p.SetBool("normalize", s.Normalize)
 	p.SetBool("ocr", s.OCR)
 	p.SetBool("straighten", s.Straighten)
+	p.SetBool("auto_rotate", s.AutoRotate)
 	p.SetBool("keep_headers", s.KeepHeaders)
 }
 
@@ -52,5 +55,6 @@ func (s Settings) save(p fyne.Preferences) {
 func (s Settings) options() (app.Options, app.Extras) {
 	o := app.Options{Detector: "auto", Margin: app.Margin{Value: s.MarginPt}}
 	o.Detect.KeepHeaders = s.KeepHeaders
+	o.Detect.AutoRotate = s.AutoRotate
 	return o, app.Extras{Straighten: s.Straighten, Normalize: s.Normalize, OCR: s.OCR, OCRLang: "eng"}
 }

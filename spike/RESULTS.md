@@ -393,3 +393,35 @@ last line stays as body text. Gates: the scan tier ships in 1.0 regardless (PLAN
 8.6), but it is below the 85% acceptance target on these scans and its clipping rate is
 far above 1%, so the GUI must show its result for review rather than apply it silently.
 PP-DocLayoutV3 fails the T3 gate on real scans (76.0% accepted, 17.5% clipped).
+
+## Addendum 2026-11-10: auto-rotate and stacked pages
+
+**Orientation.** Every page of the ten real scans (171 sheets) and of the synthetic book
+and scans (467 pages) was turned by 0, 90, 180 and 270 degrees and given to the scan
+detector with auto-rotate on:
+
+| Set | Cases | Turned back right | Left alone | Turned wrong |
+|---|---|---|---|---|
+| Real scans | 684 | 653 | 31 | 0 |
+| Synthetic book and scans | 1868 | 1852 | 16 | 0 |
+
+The pages left alone are covers, title pages, photographs and nearly blank pages with
+too little text to judge; they never get a wrong turn. In a whole document they follow
+the turn most judged pages of their cluster got, which turns every sheet of the real
+scans correctly when the whole book is stored sideways or upside down.
+
+**Sideways spreads.** The ten books stored with every page turned a quarter (both
+ways) and upside down, detected end to end: all 171 sheets turned back right in each
+case. Upside down, every crop is identical to the upright book's; sideways, every sheet
+gives the same number of pages and 164 of 171 crops are the same (IoU >= 0.95, mean
+0.991), the rest differing only through resampling the turned page to the render
+width. With OCR on, the text layer of a turned book reads the same as the upright
+book's. Benchmarks with auto-rotate on are unchanged (real scans 78.4% accepted;
+synthetic 72.4% cv, 64.7% auto).
+
+**Stacked pages.** No page of 437 ordinary single pages (the synthetic book with its
+chapter openings and figures, the synthetic single scans, the sample PDFs) was cut into
+a top and a bottom page. The rule needs a blank band of at least 6% of the height near
+the middle and the two halves' content placed alike (within 3%), so a page with an
+exactly centred gap of about twice its margins could still be cut; none of the test
+documents has one.

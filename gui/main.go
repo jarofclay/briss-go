@@ -40,6 +40,10 @@ type ui struct {
 	clearBtn *IconButton
 	top      *fyne.Container
 	hasOCR   bool
+
+	pwDialog *dialog.FormDialog // the password prompt on screen, if any
+	pwJob    *Job               // the file it asks for
+	pwQueue  []*Job             // files waiting for their prompt
 }
 
 func main() {
@@ -58,6 +62,7 @@ func newUI(a fyne.App) *ui {
 	_, err := ocr.Find()
 	u.hasOCR = err == nil
 	u.run = newRunner(u.be, u.openPreview)
+	u.run.locked = func(j *Job, wrong bool) { u.askPassword(j, wrong) }
 	u.w.SetContent(u.build())
 	u.w.Resize(fyne.NewSize(560, 620))
 	u.w.SetOnDropped(func(_ fyne.Position, uris []fyne.URI) {
@@ -164,6 +169,7 @@ func (u *ui) optionsPanel() *fyne.Container {
 		row(label("Same page size"), toggle(&s.Normalize)),
 		row(ocrLabel, ocrSwitch),
 		row(label("Straighten"), toggle(&s.Straighten)),
+		row(label("Auto-rotate"), toggle(&s.AutoRotate)),
 		row(label("Keep headers & page numbers"), toggle(&s.KeepHeaders)),
 	)
 	bg := canvas.NewRectangle(colSurface)
@@ -229,7 +235,7 @@ func (u *ui) addPaths(paths []string) {
 			continue
 		}
 		j := &Job{Src: p, Dst: dst, settings: u.settings}
-		j.row = newJobRow(j, func() { u.openFile(j.Dst) }, func() { u.openPreview(j) })
+		j.row = newJobRow(j, func() { u.openFile(j.Dst) }, func() { u.openPreview(j) }, func() { u.askPassword(j, j.wrong) })
 		u.jobs = append(u.jobs, j)
 		u.jobsBox.Add(j.row.box)
 		u.run.add(j)
@@ -241,7 +247,7 @@ func (u *ui) clearFinished() {
 	var keep []*Job
 	u.jobsBox.Objects = nil
 	for _, j := range u.jobs {
-		if j.state == stateQueued || j.state == stateWorking || j.state == stateReview {
+		if j.state == stateQueued || j.state == stateWorking || j.state == stateReview || j.state == stateLocked {
 			keep = append(keep, j)
 			u.jobsBox.Add(j.row.box)
 		}
@@ -257,3 +263,59 @@ func (u *ui) openFile(path string) {
 
 // spacer keeps an import of layout for small fixed gaps.
 var _ = layout.NewSpacer
+
+// askPassword asks for the password of a protected PDF, one file at a time.
+func (u *ui) askPassword(j *Job, wrong bool) {
+	if j.state != stateLocked {
+		return
+	}
+	if u.pwDialog != nil {
+		if u.pwJob != j {
+			for _, q := range u.pwQueue {
+				if q == j {
+					return
+				}
+			}
+			u.pwQueue = append(u.pwQueue, j)
+		}
+		return
+	}
+	entry := widget.NewPasswordEntry()
+	entry.SetPlaceHolder("Password")
+	hint := "This PDF is protected."
+	if wrong {
+		hint = "That password did not open it. Try again."
+	}
+	items := []*widget.FormItem{widget.NewFormItem("", label(hint)), widget.NewFormItem("", entry)}
+	d := dialog.NewForm(filepath.Base(j.Src), "Unlock", "Cancel", items, func(ok bool) {
+		if ok && entry.Text != "" {
+			u.unlock(j, entry.Text)
+		}
+	}, u.w)
+	entry.OnSubmitted = func(string) { d.Submit() }
+	d.SetOnClosed(func() {
+		u.pwDialog, u.pwJob = nil, nil
+		for len(u.pwQueue) > 0 {
+			next := u.pwQueue[0]
+			u.pwQueue = u.pwQueue[1:]
+			if next.state == stateLocked {
+				u.askPassword(next, next.wrong)
+				return
+			}
+		}
+	})
+	d.Resize(fyne.NewSize(360, d.MinSize().Height))
+	u.pwDialog, u.pwJob = d, j
+	d.Show()
+	u.w.Canvas().Focus(entry)
+}
+
+// unlock retries a protected PDF with a password.
+func (u *ui) unlock(j *Job, password string) {
+	if u.pwJob == j && u.pwDialog != nil {
+		u.pwDialog.Hide()
+	}
+	j.password, j.state = password, stateQueued
+	j.row.set(stateQueued, "Waiting", 0, false)
+	u.run.add(j)
+}

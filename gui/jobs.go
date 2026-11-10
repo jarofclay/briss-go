@@ -28,6 +28,7 @@ const (
 	stateDone
 	stateFailed
 	stateSkipped
+	stateLocked // waiting for a password
 )
 
 // Job is one dropped PDF.
@@ -37,7 +38,9 @@ type Job struct {
 	caption  string
 	analysis *app.Analysis
 	settings Settings
-	err      error // why it failed, in full
+	err      error  // why it failed, in full
+	password string // for a protected PDF, as the user typed it
+	wrong    bool   // the last password was refused
 	row      *jobRow
 }
 
@@ -57,7 +60,8 @@ func (b *backend) engine() (*pdf.Engine, error) {
 type runner struct {
 	be      *backend
 	queue   chan *Job
-	preview func(*Job) // opens the preview window (called on the UI goroutine)
+	preview func(*Job)       // opens the preview window (called on the UI goroutine)
+	locked  func(*Job, bool) // asks for a password (called on the UI goroutine; true: the last one was wrong)
 }
 
 func newRunner(be *backend, preview func(*Job)) *runner {
@@ -99,8 +103,12 @@ func (r *runner) run(j *Job) {
 		return
 	}
 	opts, ex := j.settings.options()
+	opts.Password = j.password
 	if j.settings.Mode == modeAuto {
 		rep, err := app.Crop(context.Background(), eng, app.CropRequest{Src: j.Src, Dst: j.Dst, Options: opts, Extras: ex, Progress: j.progress})
+		if r.needsPassword(j, err) {
+			return
+		}
 		if err != nil {
 			j.fail(err)
 			return
@@ -110,6 +118,9 @@ func (r *runner) run(j *Job) {
 	}
 	j.progress("detect", 0, 1)
 	a, err := app.Analyze(context.Background(), eng, j.Src, opts)
+	if r.needsPassword(j, err) {
+		return
+	}
 	if err != nil {
 		j.fail(err)
 		return
@@ -122,8 +133,31 @@ func (r *runner) run(j *Job) {
 	})
 }
 
+// needsPassword hands a protected PDF back to the user for its password.
+func (r *runner) needsPassword(j *Job, err error) bool {
+	if !errors.Is(err, pdf.ErrPasswordRequired) && !errors.Is(err, pdf.ErrBadPassword) {
+		return false
+	}
+	wrong := errors.Is(err, pdf.ErrBadPassword)
+	fyne.Do(func() {
+		j.state, j.wrong = stateLocked, wrong
+		caption := "Password needed"
+		if wrong {
+			caption = "Wrong password"
+		}
+		j.row.set(stateLocked, caption, 0, false)
+		if r.locked != nil {
+			r.locked(j, wrong)
+		}
+	})
+	return true
+}
+
 func summary(rep *app.Report) string {
 	parts := []string{plural(rep.OutputPages, "page")}
+	if rep.Turned > 0 {
+		parts = append(parts, fmt.Sprintf("%d turned", rep.Turned))
+	}
 	if rep.Straightened > 0 {
 		parts = append(parts, fmt.Sprintf("%d straightened", rep.Straightened))
 	}
@@ -176,11 +210,12 @@ type jobRow struct {
 	actions  *fyne.Container
 	onOpen   func()
 	onView   func()
+	unlock   *IconButton
 	view     *IconButton
 	open     *IconButton
 }
 
-func newJobRow(j *Job, onOpen, onView func()) *jobRow {
+func newJobRow(j *Job, onOpen, onView, onUnlock func()) *jobRow {
 	bg := canvas.NewRectangle(colSurface)
 	bg.CornerRadius = 12
 	fi := canvas.NewImageFromResource(icon("file", colDim))
@@ -198,7 +233,9 @@ func newJobRow(j *Job, onOpen, onView func()) *jobRow {
 	r.status = container.NewStack(r.spinner, r.doneIcon)
 	r.view = NewIconButton("eye", 16, onView)
 	r.open = NewIconButton("open", 16, onOpen)
-	r.actions = container.NewHBox(r.view, r.open)
+	r.unlock = NewIconButton("lock", 16, onUnlock)
+	r.unlock.Accent = true
+	r.actions = container.NewHBox(r.view, r.open, r.unlock)
 	inset := theme.InnerPadding()
 	capBox := container.New(layout.NewCustomPaddedLayout(-4, 0, inset, 0), cap)
 	textBox := container.NewVBox(name, capBox)
@@ -214,6 +251,7 @@ func (r *jobRow) set(st jobState, caption string, value float32, busy bool) {
 	r.caption.Color = colDim
 	r.view.Hide()
 	r.open.Hide()
+	r.unlock.Hide()
 	r.spinner.Hide()
 	r.spinner.Stop()
 	r.doneIcon.Hide()
@@ -243,6 +281,12 @@ func (r *jobRow) set(st jobState, caption string, value float32, busy bool) {
 		r.view.Show()
 		r.doneIcon.Resource = icon("skip", colFaint)
 		r.doneIcon.Show()
+	case stateLocked:
+		r.line.Hide()
+		r.unlock.Show()
+		if caption != "Password needed" {
+			r.caption.Color = colError
+		}
 	}
 	r.line.Set(value, busy, tint)
 	r.caption.Refresh()

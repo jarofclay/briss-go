@@ -35,3 +35,12 @@ Rendering and detecting every page at 1400 px costs about 60 ms per sheet on 4 t
 **Reopen if** owner-reviewed labels or a larger scan set show the parameters overfit
 (acceptance falling well below the layout models), or T3 becomes fast enough to run on
 every page, in which case `auto` should combine the two.
+
+**Addendum 2026-11-10: auto-rotate and stacked pages.** The tier now judges each page's
+orientation first (tile profiles for the text direction, ascenders against descenders
+for which way up) and works on the page turned upright, so a two-page spread scanned
+sideways is split like any other; the turn is stored with the rectangles and written
+as `/Rotate`. Undecided pages follow their cluster's majority turn. Tall sheets with
+two pages one above the other are cut at an empty middle band when both halves place
+their content alike. Auto-rotate is on by default in the app and on the command line.
+Measurements in `spike/RESULTS.md`.

@@ -61,11 +61,15 @@ func (s *session) rawRects(p int) []cropdef.Rect {
 
 // setRects replaces page p's rectangles; a rectangle keeps the angle of the
 // one it replaces, so straightening still knows the page's lean.
+// The rectangles come as drawn on the page shown upright and are stored on
+// the page as it is in the file, with the page's turn.
 func (s *session) setRects(p int, rs []geom.Ratios) {
 	old := s.rawRects(p)
+	turn := s.pageTurn(p)
 	out := make([]cropdef.Rect, len(rs))
 	for i, r := range rs {
-		out[i] = cropdef.FromRatios(r)
+		out[i] = cropdef.FromRatios(r.Turn(360 - turn))
+		out[i].Turn = turn
 		if i < len(old) {
 			out[i].Angle = old[i].Angle
 		} else if len(old) > 0 {
@@ -76,6 +80,24 @@ func (s *session) setRects(p int, rs []geom.Ratios) {
 		s.def.PageOverrides = map[int][]cropdef.Rect{}
 	}
 	s.def.PageOverrides[p] = out
+}
+
+// pageTurn is the quarter turn that shows page p upright (the turn its
+// rectangles carry; 0 when it has none).
+func (s *session) pageTurn(p int) int {
+	if rs := s.rawRects(p); len(rs) > 0 {
+		return rs[0].Turn
+	}
+	return 0
+}
+
+// upright returns page p's rectangles as drawn on the page shown upright.
+func (s *session) upright(rs []cropdef.Rect, turn int) []geom.Ratios {
+	var out []geom.Ratios
+	for _, r := range rs {
+		out = append(out, r.Ratios().Turn(turn))
+	}
+	return out
 }
 
 // sheet renders page p (cached) and calls done on the UI goroutine.
@@ -125,7 +147,7 @@ func result(g *image.Gray, o crop.Output) *image.Gray {
 		src = raster.Rotate(g, o.Angle, px*w, py*h, 255)
 	}
 	r := image.Rect(int(o.Rect.L*w), int(o.Rect.T*h), int((1-o.Rect.R)*w), int((1-o.Rect.B)*h))
-	return raster.Crop(src, r)
+	return raster.RotateQuarter(raster.Crop(src, r), o.Turn)
 }
 
 func (u *ui) openPreview(j *Job) {
@@ -190,11 +212,8 @@ func (u *ui) openPreview(j *Job) {
 			if s.page != page {
 				return
 			}
-			var rs []geom.Ratios
-			for _, r := range s.rawRects(page) {
-				rs = append(rs, r.Ratios())
-			}
-			view.SetPage(g, rs)
+			turn := s.pageTurn(page)
+			view.SetPage(raster.RotateQuarter(g, turn), s.upright(s.rawRects(page), turn))
 			refreshResults()
 		})
 		for _, q := range []int{page + 1, page - 1} { // read ahead
@@ -208,10 +227,6 @@ func (u *ui) openPreview(j *Job) {
 	next := NewIconButton("right", 18, func() { show(s.page + 1) })
 	orig, _ := s.def.PageOutputs() // the detected rectangles, for Reset
 	reset := NewIconButton("reset", 16, func() {
-		var rs []geom.Ratios
-		for _, r := range orig[s.page] {
-			rs = append(rs, r.Ratios())
-		}
 		if s.def.PageOverrides == nil {
 			s.def.PageOverrides = map[int][]cropdef.Rect{}
 		}
@@ -220,7 +235,10 @@ func (u *ui) openPreview(j *Job) {
 			s.mu.Lock()
 			g := s.sheets[s.page]
 			s.mu.Unlock()
-			view.SetPage(g, rs)
+			if g != nil {
+				turn := s.pageTurn(s.page)
+				view.SetPage(raster.RotateQuarter(g, turn), s.upright(orig[s.page], turn))
+			}
 			refreshResults()
 		}
 	})
@@ -292,15 +310,21 @@ func (u *ui) saveSession(s *session, w fyne.Window, done func(bool)) {
 		fyne.Do(func() { done(false) })
 		return
 	}
-	turned := 0
+	turned, upright := 0, 0
 	for _, os := range outs {
 		for _, o := range os {
 			if o.Angle != 0 {
 				turned++
 			}
+			if o.Turn != 0 {
+				upright++
+			}
 		}
 	}
 	caption := plural(st.OutputPages, "page")
+	if upright > 0 {
+		caption += fmt.Sprintf(" · %d turned", upright)
+	}
 	if turned > 0 {
 		caption += fmt.Sprintf(" · %d straightened", turned)
 	}

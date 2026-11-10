@@ -36,7 +36,13 @@ this page).
 - **Scanned books** (`--detector cv`, chosen automatically for scans): looks at every
   page on its own, ignores scanner borders, binding shadows, page edges and dust, and
   splits a two-page sheet into a left and a right page at the gutter. A blank side
-  produces no page.
+  produces no page. A sheet holding two pages one above the other is cut into a top
+  and a bottom page.
+- **Auto-rotate** (on by default; `--auto-rotate=false` turns it off): scanned pages
+  stored sideways or upside down are turned upright before anything else, so a
+  two-page spread scanned sideways comes out as its left and right page, upright and
+  in reading order. Pages with too little text to judge (covers, pictures) are turned
+  like the other pages of the scan.
 - **Born-digital PDFs** (ebooks, papers): the original Briss auto-crop (`legacy`).
 - **Splitting**: `--split-col` and `--split-row` cut every page into two columns or two
   halves; one output page per rectangle, in reading order.
@@ -81,12 +87,20 @@ The sliders button at the top right opens the options (remembered between runs):
 | Same page size | on | Every output page of a kind (left pages, right pages, ...) gets the size of the largest |
 | Selectable text (OCR) | on | Adds a searchable text layer to scanned pages. Needs Tesseract; without it the switch is greyed out with a link to the installer |
 | Straighten | on | Turns leaning scanned pages level |
+| Auto-rotate | on | Turns sideways or upside-down scans upright, before splitting two-page spreads |
 | Keep headers & page numbers | on | Keeps running headers, footers and page numbers inside the crop |
+
+A **password-protected PDF** waits with a lock button and asks for its password; a wrong
+one asks again, and Cancel leaves it waiting (click the lock to try later). The
+password is only kept while the app is open.
+
+![Password prompt](docs/img/gui-password.png)
 
 ![Preview window](docs/img/gui-preview.png)
 
-The preview shows each sheet with its crop boxes (what is kept is bright) and, on the
-right, the pages as they will come out, straightened and cropped. Drag a box's edge
+The preview shows each sheet with its crop boxes (what is kept is bright), upright even
+when the scan is stored sideways, and, on the right, the pages as they will come out,
+turned, straightened and cropped. Drag a box's edge
 or corner to resize it, drag inside to move it, drag on empty space to draw a new one,
 right-click a box to remove it; the circular arrow puts the page's boxes back as
 detected. Arrow keys, Page Up/Down or the buttons at the bottom turn the pages; Escape
@@ -266,6 +280,7 @@ each rectangle is numbered in output order (1 = left page of a two-page sheet).
 | `--margin 3pt` | Extra margin around the content: `pt`, `mm`, `in` or `%` |
 | `--split-col`, `--split-row` | Split every rectangle into two columns or two rows |
 | `--straighten` | Turn leaning scanned pages level |
+| `--auto-rotate` | Turn sideways or upside-down scanned pages upright (on by default; `--auto-rotate=false` to keep them as stored) |
 | `--normalize` | Give every output page of a kind the same size |
 | `--ocr`, `--ocr-lang eng+deu` | Add a selectable text layer to scanned pages (needs Tesseract) |
 | `--exclude "1-3;10"` | Pages kept out of the grouping and cropped on their own (covers, plates) |
@@ -307,7 +322,11 @@ number keeps more of the page on that side.
 
 `page_overrides` lists rectangles per page number, left to right; several rectangles
 make several output pages, and an empty list means "do not crop this page". `clusters`
-hold rectangles shared by a group of pages. The full format is in
+hold rectangles shared by a group of pages. Two optional fields per rectangle come from
+the scan detector: `angle` (degrees to turn a leaning page level, used with
+`--straighten`) and `turn` (90, 180 or 270: the output page is shown turned clockwise
+by that much, for scans stored sideways or upside down; the rectangle is still measured
+on the page as stored). The full format is in
 [docs/datasets.md](docs/datasets.md).
 
 ## Checking the draft labels

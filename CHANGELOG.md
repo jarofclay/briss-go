@@ -50,6 +50,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 * `crop` and `apply` take `--straighten` (scanned pages turned level), `--normalize`
   (one size for every output page of a kind) and `--ocr` / `--ocr-lang` (invisible text
   layer from Tesseract). Output files get the source file's permissions.
+* Auto-rotate (on by default, `--auto-rotate=false` to turn off): scanned pages stored
+  sideways or upside down are turned upright before detection, so a sideways two-page
+  spread becomes its left and right page; undecided pages follow the rest of their
+  group; turns are saved as `turn` in crop definitions and written as `/Rotate`. Tall
+  sheets holding two pages one above the other are cut into a top and a bottom page.
+* The desktop app asks for the password of protected PDFs (and again after a wrong
+  one), has an Auto-rotate switch (on), and shows turned pages upright in the preview.
 * `briss preview --crops FILE` draws a saved crop definition (for example a label) on the
   pages without detecting; `crop`, `apply` and `bench --report` create missing output
   folders. The README explains downloading, building and checking labels step by step.

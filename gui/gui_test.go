@@ -1,7 +1,10 @@
 package main
 
 import (
+	"github.com/jarofclay/briss-go/internal/cropdef"
+	"github.com/jarofclay/briss-go/internal/geom"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,8 +32,8 @@ func TestSettingsRoundTrip(t *testing.T) {
 	if s != defaultSettings() {
 		t.Fatalf("defaults: %+v", s)
 	}
-	if !s.Normalize || !s.OCR || !s.Straighten || s.Mode != modeAuto {
-		t.Fatalf("normalise, OCR and straighten are on by default, mode auto: %+v", s)
+	if !s.Normalize || !s.OCR || !s.Straighten || !s.AutoRotate || s.Mode != modeAuto {
+		t.Fatalf("normalise, OCR, straighten and auto-rotate are on by default, mode auto: %+v", s)
 	}
 	s.Mode, s.MarginPt, s.OCR = modePreviewOnly, 12, false
 	s.save(a.Preferences())
@@ -81,6 +84,40 @@ func TestAutoJobWritesOutput(t *testing.T) {
 		t.Fatalf("job failed: %v", j.err)
 	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(src), "book_cropped.pdf")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A protected PDF waits for its password: a wrong one asks again, the
+// right one crops it.
+func TestPasswordPrompt(t *testing.T) {
+	a := test.NewTempApp(t)
+	a.Settings().SetTheme(darkTheme{})
+	u := newUI(a)
+	u.settings.OCR = false
+	src := filepath.Join(t.TempDir(), "secret.pdf")
+	copyFile(t, "../testdata/pdfs/example-protected.pdf", src)
+	fyne.DoAndWait(func() { u.addPaths([]string{src}) })
+	j := u.jobs[0]
+	waitFor(t, 60*time.Second, func() bool { return j.state == stateLocked })
+	fyne.DoAndWait(func() {
+		if u.pwDialog == nil || u.pwJob != j || j.wrong || j.row.caption.Text != "Password needed" {
+			t.Errorf("expected a password prompt for the file: dialog %v, wrong %v, caption %q", u.pwDialog != nil, j.wrong, j.row.caption.Text)
+		}
+		u.unlock(j, "not it")
+	})
+	waitFor(t, 60*time.Second, func() bool { return j.state == stateLocked && j.wrong })
+	fyne.DoAndWait(func() {
+		if u.pwDialog == nil || j.row.caption.Text != "Wrong password" {
+			t.Errorf("a wrong password must ask again")
+		}
+		u.unlock(j, "secret")
+	})
+	waitFor(t, 60*time.Second, func() bool { return j.state == stateDone || j.state == stateFailed })
+	if j.state != stateDone {
+		t.Fatalf("job failed: %v", j.err)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(src), "secret_cropped.pdf")); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -154,5 +191,28 @@ func TestScreenshots(t *testing.T) {
 		fyne.DoAndWait(func() { pw.Resize(fyne.NewSize(1100, 760)) })
 		time.Sleep(time.Second)
 		shot(pw, "4-preview.png")
+	}
+}
+
+// Boxes edited on a page shown upright are stored on the page as it is in
+// the file, with the page's turn, and come back the same.
+func TestPreviewEditsTurnedPage(t *testing.T) {
+	def := &cropdef.Definition{Version: cropdef.Version, Source: cropdef.Source{Path: "x.pdf", Pages: 1},
+		PageOverrides: map[int][]cropdef.Rect{1: {{L: 0.1, B: 0.2, R: 0.3, T: 0.05, Turn: 270}}}}
+	s := &session{def: def}
+	if s.pageTurn(1) != 270 {
+		t.Fatalf("page turn %d", s.pageTurn(1))
+	}
+	shown := s.upright(s.rawRects(1), 270)
+	edited := []geom.Ratios{shown[0], {L: 0.55, B: 0.1, R: 0.05, T: 0.1}} // a second page drawn on the right
+	s.setRects(1, edited)
+	back := s.upright(s.rawRects(1), s.pageTurn(1))
+	for i := range edited {
+		if math.Abs(back[i].L-edited[i].L) > 1e-9 || math.Abs(back[i].T-edited[i].T) > 1e-9 {
+			t.Fatalf("box %d: %+v came back as %+v", i, edited[i], back[i])
+		}
+		if r := s.rawRects(1)[i]; r.Turn != 270 {
+			t.Fatalf("box %d lost the turn: %+v", i, r)
+		}
 	}
 }

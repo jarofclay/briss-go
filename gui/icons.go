@@ -22,6 +22,7 @@ var iconPaths = map[string]string{
 	"close":   `<path d="M6 6 L18 18"/><path d="M18 6 L6 18"/>`,
 	"reset":   `<path d="M4 12 C4 7.6 7.6 4 12 4 C15 4 17.6 5.7 19 8.2"/><path d="M19.5 3.5 L19.5 8.5 L14.5 8.5"/><path d="M20 12 C20 16.4 16.4 20 12 20 C9 20 6.4 18.3 5 15.8"/>`,
 	"skip":    `<circle cx="12" cy="12" r="9"/><path d="M8 12 L16 12"/>`,
+	"lock":    `<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11 L8 8 C8 5.8 9.8 4 12 4 C14.2 4 16 5.8 16 8 L16 11"/>`,
 	"clear":   `<path d="M5 7 L19 7"/><path d="M10 7 L10 4.5 L14 4.5 L14 7"/><path d="M7 7 L8 20 L16 20 L17 7"/>`,
 }
 

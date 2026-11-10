@@ -23,6 +23,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+
+## [2.0-beta] - 2026-11-10
+Briss rewritten in Go: a dark drop-and-go desktop app and a command line, with automatic
+crop detection for scanned books (two-page spreads, binding shadows, page edges),
+straightening, auto-rotation, same-size pages and a selectable OCR text layer. The Java
+Briss 2.0 alpha stays in `legacy-java/`.
+
 * [Issue-91] Migrate from JPedal to Apache PDFBox since the former has been removed from public repositories.
 * The Java sources moved to `legacy-java/`; build there with `./gradlew shadowDistZip`.
 * Go rewrite, phase 1: `cmd/briss` with the legacy command line (`-s`, `-d`, `-p`,

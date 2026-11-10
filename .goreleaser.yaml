@@ -45,5 +45,6 @@ changelog:
       - "^spike:"
 
 release:
+  name_template: "Briss {{ .Version }}"
   draft: true
   prerelease: auto

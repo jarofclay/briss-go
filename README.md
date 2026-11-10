@@ -1,17 +1,18 @@
-# Briss (Go rewrite)
+# Briss 2.0 beta
 
 Briss crops PDF pages so the text shows larger on e-readers, tablets and phones. It finds
 the printed area of each page, cuts away the margins, and can split two-page scans and
 two-column layouts into separate pages.
 
-This branch holds **briss-go**, a rewrite of the Java Briss 2.0 in Go with automatic
+This is **Briss 2.0 beta**, a rewrite of the Java Briss 2.0 alpha in Go with automatic
 crop detection: a desktop app (drop PDFs in, get them cropped) and a command-line
 program. The Java version is still here, in [legacy-java/](legacy-java/) (see the end of
 this page).
 
 ![The Briss desktop app](docs/img/gui-jobs.png)
 
-> **Work in progress.** [HANDOFF.md](HANDOFF.md) has the current state and next steps,
+> **Beta.** It works on real books, but it has only been tried on a few machines; please
+> report what goes wrong. [HANDOFF.md](HANDOFF.md) has the current state and next steps,
 > [PLAN.md](PLAN.md) the full plan, [docs/decisions](docs/decisions/README.md) the
 > decisions taken, and [spike/RESULTS.md](spike/RESULTS.md) the measurements.
 
@@ -112,10 +113,12 @@ closes the window.
 
 ### Getting the app
 
-**Ready-made downloads.** Every push to this branch builds the app for Linux, macOS
-(Apple silicon and Intel) and Windows: on GitHub open **Actions**, then **GUI**, then the
-newest run, and download the file for your system under **Artifacts** (you need to be
-signed in). On a fork, Actions may first have to be switched on in the **Actions** tab.
+**Ready-made downloads.** Each release on the repository's **Releases** page, starting
+with 2.0 beta, has the app for Linux (`Briss-linux-amd64.tar.gz`), macOS
+(`Briss-macos-apple-silicon.zip`, `Briss-macos-intel.zip`) and Windows
+(`Briss-windows-amd64.zip`), next to the command line (`briss_..._<system>_<cpu>`).
+Builds of every change to `master` are under **Actions**, then **GUI**, the newest run,
+**Artifacts** (you need to be signed in).
 
 - **macOS**: unzip and drag **Briss.app** to Applications. The app is not signed yet, so
   the first time right-click it and choose **Open**, then **Open** again.
@@ -186,7 +189,7 @@ itself the first time, so an older version printed here is fine.
 ### 2. Download the code
 
 ```bash
-git clone --branch claude/gui https://github.com/jarofclay/briss-go.git
+git clone https://github.com/jarofclay/briss-go.git
 ```
 
 ```bash
@@ -194,9 +197,8 @@ cd briss-go
 ```
 
 This makes a `briss-go` folder in the folder your terminal is in (your home folder
-unless you moved). Without Git: on the repository's GitHub page pick the branch
-`claude/gui` in the branch menu, then **Code**, **Download ZIP**, unpack
-it, and `cd` into the unpacked folder.
+unless you moved). Without Git: on the repository's GitHub page choose **Code**,
+**Download ZIP**, unpack it, and `cd` into the unpacked folder.
 
 ### 3. Build
 

@@ -1,10 +1,10 @@
-# Handoff: state of the briss-go rewrite (2026-11-06, the desktop app)
+# Handoff: state of the briss-go rewrite (2026-11-10, 2.0 beta)
 
-For whoever continues this work. The command line, the core and the scan tier are on
-branch `claude/happy-cray-vejte7` of `jarofclay/briss-go`; branch `claude/gui` adds the
-desktop app and the straighten, normalize and OCR steps on top of it (the owner asked
-for the app on its own branch). Neither branch has been merged and no pull request has
-been opened. Read in this order: this file, `PLAN.md` (the plan,
+For whoever continues this work. Everything (the command line, the core, the scan tier
+and the desktop app) is on `master` of `jarofclay/briss-go` and tagged `v2.0.0-beta`
+(Briss 2.0 beta); the release for the tag is drafted by goreleaser with the command line
+archives and the app downloads attached, and the owner publishes it. The working
+branches `claude/happy-cray-vejte7` and `claude/gui` were merged into `master`. Read in this order: this file, `PLAN.md` (the plan,
 with "Amended" markers where measurements changed it), `docs/decisions/` (one record per
 decision with its evidence), `spike/RESULTS.md` (measurements), `spike/README.md`.
 

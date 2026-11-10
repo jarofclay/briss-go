@@ -115,3 +115,24 @@ func TestIoU(t *testing.T) {
 		t.Fatal("disjoint rectangles must have IoU 0")
 	}
 }
+
+// Turning a rectangle moves its corners where TurnPoint moves them: a quarter
+// turn clockwise takes the top-left corner to the top-right.
+func TestTurnMatchesTurnPoint(t *testing.T) {
+	r := Ratios{L: 0.1, B: 0.2, R: 0.3, T: 0.4}
+	for _, turn := range []int{0, 90, 180, 270} {
+		g := r.Turn(turn)
+		x0, y0 := TurnPoint(r.L, r.T, turn)
+		x1, y1 := TurnPoint(1-r.R, 1-r.B, turn)
+		want := Ratios{L: math.Min(x0, x1), T: math.Min(y0, y1), R: 1 - math.Max(x0, x1), B: 1 - math.Max(y0, y1)}
+		if !near(g.L, want.L) || !near(g.T, want.T) || !near(g.R, want.R) || !near(g.B, want.B) {
+			t.Fatalf("turn %d: got %+v want %+v", turn, g, want)
+		}
+		if back := g.Turn(360 - turn); !near(back.L, r.L) || !near(back.T, r.T) {
+			t.Fatalf("turn %d does not undo: %+v", turn, back)
+		}
+	}
+	if x, y := TurnPoint(0, 0, 90); x != 1 || y != 0 {
+		t.Fatalf("top-left after a clockwise quarter turn: %v %v", x, y)
+	}
+}

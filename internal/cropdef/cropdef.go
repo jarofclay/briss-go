@@ -30,6 +30,10 @@ type Rect struct {
 	R     float64 `json:"r"`
 	T     float64 `json:"t"`
 	Angle float64 `json:"angle,omitempty"`
+	// Turn, when set, shows the output page turned clockwise by 90, 180 or
+	// 270 degrees so its text is upright. The rectangle is still measured on
+	// the source page as shown before the turn.
+	Turn int `json:"turn,omitempty"`
 }
 
 // Ratios converts to geom.Ratios.
@@ -110,6 +114,9 @@ func (d *Definition) Validate() error {
 		for i, r := range rs {
 			if !r.Ratios().Valid() {
 				return fmt.Errorf("cropdef: page %d override rectangle %d is invalid: %+v", p, i, r)
+			}
+			if r.Turn%90 != 0 || r.Turn < 0 || r.Turn >= 360 {
+				return fmt.Errorf("cropdef: page %d override rectangle %d: turn %d is not 0, 90, 180 or 270", p, i, r.Turn)
 			}
 		}
 	}

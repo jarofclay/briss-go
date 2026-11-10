@@ -107,6 +107,25 @@ func (r Ratios) Unrotate(rotation int) Ratios {
 	return r
 }
 
+// Turn returns the same rectangle measured on the page as shown after a
+// further clockwise turn of turn degrees (a multiple of 90): the inverse of
+// Unrotate.
+func (r Ratios) Turn(turn int) Ratios { return r.Unrotate(-turn) }
+
+// TurnPoint maps a point (x, y), as fractions of the page from its left and
+// top, to the page shown after a further clockwise turn of turn degrees.
+func TurnPoint(x, y float64, turn int) (float64, float64) {
+	switch NormalizeRotation(turn) {
+	case 90:
+		return 1 - y, x
+	case 180:
+		return 1 - x, 1 - y
+	case 270:
+		return y, 1 - x
+	}
+	return x, y
+}
+
 // ScaledBox ports RectangleHandler.calculateScaledRectangle: it takes the
 // smaller (by area) of the media box and the crop box as the reference, rotates
 // the ratios back to the unrotated page, and returns the crop rectangle in PDF

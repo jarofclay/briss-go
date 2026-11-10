@@ -17,6 +17,8 @@ type Options struct {
 	SplitRows    bool    // split each rectangle into two rows
 	KeepHeaders  bool    // keep running headers, footers and page numbers
 	MarginPt     float64 // padding around detected content, in points
+	AutoRotate   bool    // turn pages whose text is sideways or upside down (page detectors)
+	ForceTurn    int     // turn every page clockwise by this instead of judging each (page detectors)
 }
 
 // Request is one cluster to detect.
@@ -31,6 +33,7 @@ type Candidate struct {
 	Rects         []geom.Ratios         // rectangles in output order
 	PerPage       map[int][]geom.Ratios // optional per-page overrides, 1-based pages
 	PerPageAngles map[int][]float64     // optional skew per PerPage rectangle, degrees (see PageResult)
+	PerPageTurns  map[int][]int         // optional quarter turn per PerPage rectangle (see PageResult)
 	Confidence    float64               // 0..1, tier-defined
 	Source        string                // tier name and version, for provenance
 	Notes         string
@@ -48,6 +51,8 @@ type Detector interface {
 type PageResult struct {
 	Rects      []geom.Ratios // rectangles in output order (left page first on a two-up sheet)
 	Angles     []float64     // per rectangle: skew of its text in degrees, counterclockwise turn that straightens it (nil: unknown)
+	Turns      []int         // per rectangle: clockwise quarter turn (0, 90, 180, 270) that makes its text upright (nil: none)
+	TurnSure   bool          // the page's orientation was judged from its text (not just left alone)
 	Confidence float64
 	Notes      string
 }

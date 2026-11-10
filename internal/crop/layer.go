@@ -23,6 +23,10 @@ type Output struct {
 	// Pivot is the point the page is turned about, in display ratios from
 	// the left and top of the source page; nil means the centre of Rect.
 	Pivot *[2]float64
+	// Turn shows the output page turned clockwise by 90, 180 or 270 degrees
+	// (added to the page's /Rotate) so a sideways or upside-down scan reads
+	// upright. Rect, Angle and Pivot stay measured on the page as stored.
+	Turn  int
 	Words []Word // OCR words to lay over the page as invisible, selectable text
 }
 
@@ -35,7 +39,8 @@ func (o Output) PivotPoint() (float64, float64) {
 }
 
 // Word is one recognised word: its text and its box on the source page as
-// displayed, in ratios, before straightening (as the scan shows it).
+// it will be read (shown with the output's Turn), in ratios, before
+// straightening (as the scan shows it).
 type Word struct {
 	Text string
 	Box  geom.Ratios
@@ -206,7 +211,7 @@ func effectiveResources(pctx *model.Context, d types.Dict) (types.Dict, error) {
 // leak state into what follows and the text layer turns with the scan.
 func decorate(pctx *model.Context, target types.Dict, ref geom.Rect, rot int, out Output, fontRef **types.IndirectRef) error {
 	turn := math.Abs(out.Angle) >= 0.01
-	layer := textLayer(out.Words, ref, rot)
+	layer := textLayer(out.Words, ref, (rot+out.Turn)%360)
 	if !turn && layer == nil {
 		return nil
 	}

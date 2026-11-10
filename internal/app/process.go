@@ -14,6 +14,7 @@ import (
 	"github.com/jarofclay/briss-go/internal/geom"
 	"github.com/jarofclay/briss-go/internal/ocr"
 	"github.com/jarofclay/briss-go/internal/pdf"
+	"github.com/jarofclay/briss-go/internal/raster"
 )
 
 // Extras are the steps beyond cropping that the GUI turns on by default.
@@ -48,7 +49,7 @@ func Outputs(def *cropdef.Definition, pages []pdf.PageInfo, ex Extras) (map[int]
 		}
 		pi := pages[p-1]
 		for _, r := range rs {
-			o := crop.Output{Rect: r.Ratios()}
+			o := crop.Output{Rect: r.Ratios(), Turn: r.Turn}
 			if a := r.Angle; ex.Straighten && math.Abs(a) >= minTurn && math.Abs(a) <= maxTurn {
 				if sr, ok := straightRect(o.Rect, a, pi.Width, pi.Height); ok {
 					px, py := o.PivotPoint() // the content's centre, kept when normalising moves the box
@@ -89,16 +90,33 @@ func straightRect(r geom.Ratios, deg, pw, ph float64) (geom.Ratios, bool) {
 // is (a short last page of a chapter), its bottom likewise (a chapter
 // opening), and grows about its centre otherwise. Rectangles stay on the page.
 func normalize(outs map[int][]crop.Output, pages []pdf.PageInfo) {
-	type ref struct{ page, idx int }
-	groups := map[[3]int][]ref{}
+	// Work on every page as it will be read: turned upright when its output
+	// carries a turn, so "top", "left page" and the sizes mean what a reader
+	// sees.
+	type view struct {
+		r      geom.Ratios // the rectangle on the upright page
+		pw, ph float64     // the upright page's size
+	}
+	views := map[int][]view{}
 	for p, os := range outs {
 		pi := pages[p-1]
-		for i, o := range os {
+		for _, o := range os {
+			v := view{r: o.Rect.Turn(o.Turn), pw: pi.Width, ph: pi.Height}
+			if o.Turn%180 == 90 {
+				v.pw, v.ph = pi.Height, pi.Width
+			}
+			views[p] = append(views[p], v)
+		}
+	}
+	type ref struct{ page, idx int }
+	groups := map[[3]int][]ref{}
+	for p, vs := range views {
+		for i, v := range vs {
 			side := 0 // a portrait page is one page; a landscape sheet has a left and a right one
-			if pi.Width > 1.1*pi.Height && (o.Rect.L+1-o.Rect.R)/2 >= 0.5 {
+			if v.pw > 1.1*v.ph && (v.r.L+1-v.r.R)/2 >= 0.5 {
 				side = 1
 			}
-			k := [3]int{int(math.Round(pi.Width / 10)), int(math.Round(pi.Height / 10)), side}
+			k := [3]int{int(math.Round(v.pw / 10)), int(math.Round(v.ph / 10)), side}
 			groups[k] = append(groups[k], ref{p, i})
 		}
 	}
@@ -106,23 +124,23 @@ func normalize(outs map[int][]crop.Output, pages []pdf.PageInfo) {
 		var tw, th float64
 		var tops, bots []float64
 		for _, r := range g {
-			o, pi := outs[r.page][r.idx], pages[r.page-1]
-			tw = math.Max(tw, (1-o.Rect.L-o.Rect.R)*pi.Width)
-			th = math.Max(th, (1-o.Rect.T-o.Rect.B)*pi.Height)
-			tops, bots = append(tops, o.Rect.T), append(bots, o.Rect.B)
+			v := views[r.page][r.idx]
+			tw = math.Max(tw, (1-v.r.L-v.r.R)*v.pw)
+			th = math.Max(th, (1-v.r.T-v.r.B)*v.ph)
+			tops, bots = append(tops, v.r.T), append(bots, v.r.B)
 		}
 		medT, medB := median(tops), median(bots)
 		for _, r := range g {
-			os, pi := outs[r.page], pages[r.page-1]
-			o := os[r.idx]
-			x0, x1 := o.Rect.L*pi.Width, (1-o.Rect.R)*pi.Width
-			y0, y1 := o.Rect.T*pi.Height, (1-o.Rect.B)*pi.Height
-			lo, hi := 0.0, pi.Width // room: half way to the neighbours on the sheet
-			for j, n := range os {
+			vs := views[r.page]
+			v := vs[r.idx]
+			x0, x1 := v.r.L*v.pw, (1-v.r.R)*v.pw
+			y0, y1 := v.r.T*v.ph, (1-v.r.B)*v.ph
+			lo, hi := 0.0, v.pw // room: half way to the neighbours on the sheet
+			for j, n := range vs {
 				if j == r.idx {
 					continue
 				}
-				nx0, nx1 := n.Rect.L*pi.Width, (1-n.Rect.R)*pi.Width
+				nx0, nx1 := n.r.L*v.pw, (1-n.r.R)*v.pw
 				if nx1 <= x0 {
 					lo = math.Max(lo, (nx1+x0)/2)
 				}
@@ -133,17 +151,18 @@ func normalize(outs map[int][]crop.Output, pages []pdf.PageInfo) {
 			nx0, nx1 := fit((x0+x1)/2-tw/2, tw, lo, hi)
 			var ny0 float64
 			switch {
-			case math.Abs(o.Rect.T-medT) <= 0.02:
+			case math.Abs(v.r.T-medT) <= 0.02:
 				ny0 = y0
-			case math.Abs(o.Rect.B-medB) <= 0.02:
+			case math.Abs(v.r.B-medB) <= 0.02:
 				ny0 = y1 - th
 			default:
 				ny0 = (y0+y1)/2 - th/2
 			}
-			ny0, ny1 := fit(ny0, th, 0, pi.Height)
-			nr := geom.Ratios{L: nx0 / pi.Width, R: 1 - nx1/pi.Width, T: ny0 / pi.Height, B: 1 - ny1/pi.Height}
+			ny0, ny1 := fit(ny0, th, 0, v.ph)
+			nr := geom.Ratios{L: nx0 / v.pw, R: 1 - nx1/v.pw, T: ny0 / v.ph, B: 1 - ny1/v.ph}
 			if nr.Valid() {
-				os[r.idx].Rect = nr
+				o := &outs[r.page][r.idx]
+				o.Rect = nr.Turn(360 - o.Turn) // back on the page as stored
 			}
 		}
 	}
@@ -211,7 +230,18 @@ func AddOCR(ctx context.Context, eng *pdf.Engine, doc *pdf.Document, outs map[in
 		progress("ocr", 0, total)
 	}
 	err = eng.Render(ctx, doc, jobs, func(j pdf.RenderJob, g *image.Gray) error {
-		words, err := ocr.Recognize(ctx, bin, g, lang)
+		mu.Lock()
+		turn := 0
+		if os := outs[j.Page+1]; len(os) > 0 {
+			turn = os[0].Turn // the outputs of a page share its turn
+		}
+		mu.Unlock()
+		up := g
+		if turn != 0 {
+			up = raster.RotateQuarter(g, turn) // Tesseract reads upright text only
+		}
+		uw, uh := up.Bounds().Dx(), up.Bounds().Dy()
+		words, err := ocr.Recognize(ctx, bin, up, lang)
 		n := int(done.Add(1))
 		if progress != nil {
 			progress("ocr", n, total)
@@ -223,14 +253,15 @@ func AddOCR(ctx context.Context, eng *pdf.Engine, doc *pdf.Document, outs map[in
 			return nil
 		}
 		pi := doc.Pages[j.Page]
-		sx, sy := pi.Width/float64(j.Width), pi.Height/float64(j.Height)
 		mu.Lock()
 		defer mu.Unlock()
 		os := outs[j.Page+1]
 		for _, w := range words {
-			box := geom.Ratios{L: float64(w.X0) / float64(j.Width), R: 1 - float64(w.X1)/float64(j.Width), T: float64(w.Y0) / float64(j.Height), B: 1 - float64(w.Y1)/float64(j.Height)}
-			cx, cy := float64(w.X0+w.X1)/2*sx, float64(w.Y0+w.Y1)/2*sy
-			if i := outputAt(os, cx, cy, pi); i >= 0 {
+			// the box on the upright page, which is how the text layer is laid
+			box := geom.Ratios{L: float64(w.X0) / float64(uw), R: 1 - float64(w.X1)/float64(uw), T: float64(w.Y0) / float64(uh), B: 1 - float64(w.Y1)/float64(uh)}
+			// and the word's centre on the page as stored, to find its output
+			fx, fy := geom.TurnPoint(float64(w.X0+w.X1)/2/float64(uw), float64(w.Y0+w.Y1)/2/float64(uh), 360-turn)
+			if i := outputAt(os, fx*pi.Width, fy*pi.Height, pi); i >= 0 {
 				os[i].Words = append(os[i].Words, crop.Word{Text: w.Text, Box: box})
 			}
 		}

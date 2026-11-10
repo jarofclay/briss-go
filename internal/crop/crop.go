@@ -182,8 +182,9 @@ func apply(ctx context.Context, pctx *model.Context, pages map[int][]Output) (St
 			box := types.NewRectangle(b.LLX, b.LLY, b.URX, b.URY).Array()
 			target["MediaBox"] = box
 			target["CropBox"] = box
-			if cur.rot != 0 {
-				target["Rotate"] = types.Integer(cur.rot) // explicit, so inheritance cannot drift
+			if cur.rot != 0 || o.Turn != 0 {
+				// explicit, so inheritance cannot drift; a turn adds to it
+				target["Rotate"] = types.Integer((cur.rot + geom.NormalizeRotation(o.Turn)) % 360)
 			}
 			if err := decorate(pctx, target, ref, cur.rot, o, &fontRef); err != nil {
 				return st, fmt.Errorf("crop: page %d copy %d: %w", p, k+1, err)

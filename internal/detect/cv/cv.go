@@ -14,12 +14,15 @@ package cv
 
 import (
 	"context"
+	"fmt"
 	"image"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/jarofclay/briss-go/internal/detect"
 	"github.com/jarofclay/briss-go/internal/geom"
+	"github.com/jarofclay/briss-go/internal/raster"
 )
 
 // Name is the detector name used in crop definitions.
@@ -28,42 +31,48 @@ const Name = "cv@1"
 // Parameters, as fractions of the page size unless noted. They were set on
 // synthetic scans and on photocopied two-up book scans.
 type Params struct {
-	Width         int     // render width in pixels
-	SpeckArea     int     // components smaller than this many pixels are noise
-	EdgeDark      float64 // a border column or row darker than this share is scanner edge
-	EdgeMax       float64 // trim at most this share of the width or height as scanner edge
-	BorderLarge   float64 // components touching the border and larger than this share of a side are edge junk
-	LineHeight    float64 // drop components taller than this fraction of the page and ...
-	LineWidth     float64 // ... narrower than this fraction of the width (book edges, gutter lines)
-	BorderDensity float64 // components touching the border with more ink than this share of their box are edge junk
-	VerticalGap   float64 // row bands closer than this merge into one band
-	HorizontalGap float64 // column bands closer than this (fraction of the page part) merge
-	MinBandInk    float64 // bands with less than this share of the part's ink are noise ...
-	MinBandComps  int     // ... unless they hold at least this many components (a short heading)
-	NearGap       float64 // bands this close to the core block join it (page numbers, short headings)
-	TwoUpAspect   float64 // sheets wider than this times their height may hold two pages
-	MinHalfInk    float64 // each half needs this share of the ink ...
-	MinHalfComps  int     // ... and this many components to count as a page
-	HeaderBand    float64 // a top or bottom line thinner than this is a header or footer candidate
-	HeaderGap     float64 // ... when it is separated from the body by at least this much
-	Pad           float64 // padding added around the block, fraction of the page side
-	StripeWidth   float64 // fragments narrower than this share of the width ...
-	StripeCover   float64 // ... stacked in one column over more than this share of the height are a book edge
-	LineJoin      float64 // glyphs closer than this many glyph heights on one line join into a text line
-	MinLineGlyphs int     // a text line has at least this many glyphs ...
-	GlyphMin      float64 // ... whose median height is at least this share of the page's glyph height
-	GutterShade   float64 // a binding shadow is this many grey levels darker than the other gutter candidates
-	ClusterGap    float64 // text lines closer than this vertically form one cluster
-	MinCluster    float64 // clusters with less than this share of the main cluster's ink ...
-	MinClusterN   int     // ... and fewer glyphs than this are stray marks ...
-	EdgeZone      float64 // ... when they reach into this share of the sheet height at the top or bottom
-	SideGap       float64 // glyph columns this close beside the block join it (page numbers in a contents list)
-	FooterWidth   float64 // a detached bottom line at least this share of the block width is body text, not a footer
-	MaxSkew       float64 // straightening angles are searched up to this many degrees either way ...
-	SkewContrast  float64 // ... and kept only when the best angle's baseline sharpness is this many times the average
-	ShadowDelta   int     // marks whose surroundings are this many grey levels darker than the paper sit in a shadow
-	FlatMin       int     // columns whose paper is darker than this are left alone by flattening (black borders) ...
-	FlatWidth     float64 // ... and so are shaded bands narrower than this share of the width
+	Width           int     // render width in pixels
+	SpeckArea       int     // components smaller than this many pixels are noise
+	EdgeDark        float64 // a border column or row darker than this share is scanner edge
+	EdgeMax         float64 // trim at most this share of the width or height as scanner edge
+	BorderLarge     float64 // components touching the border and larger than this share of a side are edge junk
+	LineHeight      float64 // drop components taller than this fraction of the page and ...
+	LineWidth       float64 // ... narrower than this fraction of the width (book edges, gutter lines)
+	BorderDensity   float64 // components touching the border with more ink than this share of their box are edge junk
+	VerticalGap     float64 // row bands closer than this merge into one band
+	HorizontalGap   float64 // column bands closer than this (fraction of the page part) merge
+	MinBandInk      float64 // bands with less than this share of the part's ink are noise ...
+	MinBandComps    int     // ... unless they hold at least this many components (a short heading)
+	NearGap         float64 // bands this close to the core block join it (page numbers, short headings)
+	TwoUpAspect     float64 // sheets wider than this times their height may hold two pages
+	MinHalfInk      float64 // each half needs this share of the ink ...
+	MinHalfComps    int     // ... and this many components to count as a page
+	HeaderBand      float64 // a top or bottom line thinner than this is a header or footer candidate
+	HeaderGap       float64 // ... when it is separated from the body by at least this much
+	Pad             float64 // padding added around the block, fraction of the page side
+	StripeWidth     float64 // fragments narrower than this share of the width ...
+	StripeCover     float64 // ... stacked in one column over more than this share of the height are a book edge
+	LineJoin        float64 // glyphs closer than this many glyph heights on one line join into a text line
+	MinLineGlyphs   int     // a text line has at least this many glyphs ...
+	GlyphMin        float64 // ... whose median height is at least this share of the page's glyph height
+	GutterShade     float64 // a binding shadow is this many grey levels darker than the other gutter candidates
+	ClusterGap      float64 // text lines closer than this vertically form one cluster
+	MinCluster      float64 // clusters with less than this share of the main cluster's ink ...
+	MinClusterN     int     // ... and fewer glyphs than this are stray marks ...
+	EdgeZone        float64 // ... when they reach into this share of the sheet height at the top or bottom
+	SideGap         float64 // glyph columns this close beside the block join it (page numbers in a contents list)
+	FooterWidth     float64 // a detached bottom line at least this share of the block width is body text, not a footer
+	MaxSkew         float64 // straightening angles are searched up to this many degrees either way ...
+	SkewContrast    float64 // ... and kept only when the best angle's baseline sharpness is this many times the average
+	OrientMinGlyphs int     // a page needs this many glyphs before its orientation is judged
+	OrientTile      float64 // a tile votes for a text direction when one profile varies this many times more than the other
+	OrientVote      float64 // a direction wins with this many times the other's votes
+	OrientUpright   float64 // ascender minus descender share needed to call text upright (or, negative, upside down)
+	StackGap        float64 // two pages one above the other are separated by at least this share of the height ...
+	StackAlign      float64 // ... and sit in their halves alike, within this share of the sheet
+	ShadowDelta     int     // marks whose surroundings are this many grey levels darker than the paper sit in a shadow
+	FlatMin         int     // columns whose paper is darker than this are left alone by flattening (black borders) ...
+	FlatWidth       float64 // ... and so are shaded bands narrower than this share of the width
 }
 
 // DefaultParams are the parameters used by the detector.
@@ -76,11 +85,17 @@ var DefaultParams = Params{
 	HeaderBand: 0.022, HeaderGap: 0.012,
 	Pad: 0.003, StripeWidth: 0.006, StripeCover: 0.2,
 	LineJoin: 1.2, MinLineGlyphs: 3, GlyphMin: 0.5, GutterShade: 10,
-	ClusterGap: 0.06, MinCluster: 0.02, MinClusterN: 8, EdgeZone: 0.05, SideGap: 0.3, FooterWidth: 0.6, MaxSkew: 5, SkewContrast: 1.6, ShadowDelta: 30, FlatMin: 70, FlatWidth: 0.08,
+	ClusterGap: 0.06, MinCluster: 0.02, MinClusterN: 8, EdgeZone: 0.05, SideGap: 0.3, FooterWidth: 0.6, MaxSkew: 5, SkewContrast: 1.6, ShadowDelta: 30,
+	OrientMinGlyphs: 120, OrientTile: 1.4, OrientVote: 2, OrientUpright: 0.2, StackGap: 0.06, StackAlign: 0.03, FlatMin: 70, FlatWidth: 0.08,
 }
 
 // Detector implements detect.PageDetector.
-type Detector struct{ P Params }
+type Detector struct {
+	P Params
+	// set on the inner calls that work on a turned page or on one half of
+	// a stacked sheet, so they do not turn or cut again
+	noTurn, noRowSplit bool
+}
 
 // New returns a detector with the default parameters.
 func New() Detector { return Detector{P: DefaultParams} }
@@ -128,6 +143,9 @@ type Trace struct {
 	Kept, Dropped              []comp
 	Reasons                    []string // per dropped component
 	Parts                      [][2]int
+	Turn                       int      // clockwise quarter turn the page needs, when AutoRotate found one
+	TurnSure                   bool     // the orientation was judged, not left alone
+	RowSplit                   int      // row where a sheet of two pages one above the other is cut
 	Lines                      []comp   // text lines, figures and marks that make up the blocks
 	LineWhy                    []string // per line: core, near, beside or column
 	Blocks                     [][4]int
@@ -135,8 +153,60 @@ type Trace struct {
 
 // DetectPage implements detect.PageDetector.
 func (d Detector) DetectPage(img *image.Gray, opts detect.Options) detect.PageResult {
-	r, _ := d.trace(img, opts)
+	r, tr := d.trace(img, opts)
+	switch {
+	case tr.Turn != 0:
+		// Sideways or upside down: find the pages on the page turned upright
+		// (where a sideways two-page spread becomes a left and a right page),
+		// then measure the rectangles on the page as it is.
+		inner := d
+		inner.noTurn = true
+		upImg := raster.RotateQuarter(img, tr.Turn)
+		// A sideways page turned upright is wider than pages are rendered;
+		// bring it to the usual width so pixel-sized thresholds mean the same.
+		if uw, uh := upImg.Bounds().Dx(), upImg.Bounds().Dy(); uw > d.RenderWidth() {
+			upImg = raster.Resize(upImg, d.RenderWidth(), max(1, uh*d.RenderWidth()/uw))
+		}
+		up := inner.DetectPage(upImg, opts)
+		out := detect.PageResult{Angles: up.Angles, Confidence: up.Confidence, TurnSure: tr.TurnSure}
+		for range up.Rects {
+			out.Turns = append(out.Turns, tr.Turn)
+		}
+		for _, rr := range up.Rects {
+			out.Rects = append(out.Rects, rr.Turn(360-tr.Turn))
+		}
+		out.Notes = strings.TrimSuffix(fmt.Sprintf("turned %d°; %s", tr.Turn, up.Notes), "; ")
+		return out
+	case tr.RowSplit > 0:
+		r = d.stacked(img, tr.RowSplit, opts)
+	}
+	r.TurnSure = tr.TurnSure
 	return r
+}
+
+// stacked detects the two pages of a sheet cut at row split, top first.
+func (d Detector) stacked(img *image.Gray, split int, opts detect.Options) detect.PageResult {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	inner := d
+	inner.noTurn, inner.noRowSplit = true, true
+	out := detect.PageResult{Confidence: 1, Notes: "two pages, one above the other"}
+	for _, half := range [][2]int{{0, split}, {split, h}} {
+		hh := half[1] - half[0]
+		r := inner.DetectPage(raster.Crop(img, image.Rect(b.Min.X, b.Min.Y+half[0], b.Min.X+w, b.Min.Y+half[1])), opts)
+		for i, rr := range r.Rects {
+			top := float64(half[0]) + rr.T*float64(hh)
+			bot := float64(half[0]) + (1-rr.B)*float64(hh)
+			out.Rects = append(out.Rects, geom.Ratios{L: rr.L, R: rr.R, T: top / float64(h), B: 1 - bot/float64(h)})
+			a := 0.0
+			if i < len(r.Angles) {
+				a = r.Angles[i]
+			}
+			out.Angles = append(out.Angles, a)
+		}
+		out.Confidence = math.Min(out.Confidence, r.Confidence)
+	}
+	return out
 }
 
 func (d Detector) trace(img *image.Gray, opts detect.Options) (detect.PageResult, *Trace) {
@@ -220,12 +290,30 @@ func (d Detector) trace(img *image.Gray, opts detect.Options) (detect.PageResult
 	if len(kept) == 0 {
 		return detect.PageResult{Rects: []geom.Ratios{{}}, Notes: "no content found; keeping the whole page"}, tr
 	}
+	if !d.noTurn && opts.ForceTurn%360 != 0 {
+		tr.Turn = ((opts.ForceTurn % 360) + 360) % 360
+		return detect.PageResult{}, tr
+	}
+	if opts.AutoRotate && !d.noTurn {
+		turn, conf := orientation(mask, w, h, kept, p)
+		tr.TurnSure = conf > 0
+		if turn != 0 {
+			tr.Turn = turn
+			return detect.PageResult{}, tr
+		}
+	}
 	parts := [][2]int{{0, w}}
 	notes := ""
 	if float64(w) > p.TwoUpAspect*float64(h) {
 		if split, ok := gutter(kept, img, t, h-bt, p); ok {
 			parts = [][2]int{{0, split}, {split, w}}
 			notes = "two-page sheet"
+		}
+	}
+	if len(parts) == 1 && !d.noRowSplit && float64(h) > p.TwoUpAspect*float64(w) {
+		if split, ok := rowGutter(kept, w, h, t, h-bt, p); ok {
+			tr.RowSplit = split
+			return detect.PageResult{}, tr
 		}
 	}
 	tr.Parts = parts

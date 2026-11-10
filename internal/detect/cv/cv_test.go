@@ -4,6 +4,7 @@ import (
 	"image"
 	"math"
 	"math/rand"
+	"strings"
 	"testing"
 
 	"github.com/jarofclay/briss-go/internal/detect"
@@ -259,4 +260,79 @@ func newSheetText(t *testing.T) *image.Gray {
 	s := newSheet(700, 900, 13)
 	s.text(80, 100, 620, 800, 12, 6)
 	return s.g
+}
+
+// sideBySide puts two rendered book pages side by side with a gutter.
+func sideBySide(l, r *image.Gray) *image.Gray {
+	lw, h := l.Bounds().Dx(), l.Bounds().Dy()
+	gap := lw / 20
+	out := image.NewGray(image.Rect(0, 0, 2*lw+gap, h))
+	for i := range out.Pix {
+		out.Pix[i] = 255
+	}
+	for y := 0; y < h; y++ {
+		copy(out.Pix[y*out.Stride:], l.Pix[y*l.Stride:y*l.Stride+lw])
+		copy(out.Pix[y*out.Stride+lw+gap:], r.Pix[y*r.Stride:y*r.Stride+lw])
+	}
+	return out
+}
+
+// A two-page spread scanned sideways (the pages one above the other, the
+// text running up or down the sheet) is turned upright and split into a
+// left and a right page; the rectangles are those of the upright spread,
+// measured on the sheet as stored, and carry the turn.
+func TestAutoRotateSidewaysSpread(t *testing.T) {
+	book := "../../../testdata/pdfs/book300.pdf"
+	sheet := sideBySide(renderPage(t, book, 12), renderPage(t, book, 13))
+	opts := detect.Options{KeepHeaders: true, AutoRotate: true}
+	upright := New().DetectPage(sheet, opts)
+	if len(upright.Rects) != 2 || len(upright.Turns) != 0 {
+		t.Fatalf("upright spread: %+v", upright)
+	}
+	for _, q := range []int{90, 180, 270} {
+		got := New().DetectPage(raster.RotateQuarter(sheet, q), opts)
+		want := (360 - q) % 360
+		if len(got.Rects) != 2 || len(got.Turns) != 2 || got.Turns[0] != want || got.Turns[1] != want {
+			t.Fatalf("turned %d: %+v", q, got)
+		}
+		for i, r := range got.Rects {
+			u := r.Turn(want) // back on the upright spread
+			if math.Abs(u.L-upright.Rects[i].L) > 0.01 || math.Abs(u.T-upright.Rects[i].T) > 0.01 ||
+				math.Abs(u.R-upright.Rects[i].R) > 0.01 || math.Abs(u.B-upright.Rects[i].B) > 0.01 {
+				t.Fatalf("turned %d, page %d: %+v on the upright spread, want %+v", q, i+1, u, upright.Rects[i])
+			}
+		}
+	}
+	plain := New().DetectPage(raster.RotateQuarter(sheet, 90), detect.Options{KeepHeaders: true})
+	if len(plain.Turns) != 0 {
+		t.Fatalf("without AutoRotate nothing is turned: %+v", plain)
+	}
+}
+
+// Two landscape pages printed one above the other on a portrait sheet are
+// cut into a top and a bottom page; a single page whose text simply ends
+// half way down, or a title page, is not.
+func TestStackedPages(t *testing.T) {
+	const w, h = 900, 1300
+	s := newSheet(w, h, 21)
+	s.text(80, 70, 820, 560, 11, 7)
+	s.text(80, 720, 820, 1210, 11, 7)
+	r := New().DetectPage(s.g, detect.Options{KeepHeaders: true})
+	if len(r.Rects) != 2 || !strings.Contains(r.Notes, "one above the other") {
+		t.Fatalf("expected a top and a bottom page: %+v", r)
+	}
+	near(t, "top page", px(r.Rects[0], w, h), [4]int{80, 70, 820, lastLine(70, 560, 11, 7)}, 6)
+	near(t, "bottom page", px(r.Rects[1], w, h), [4]int{80, 720, 820, lastLine(720, 1210, 11, 7)}, 6)
+
+	end := newSheet(w, h, 22) // a chapter that ends half way down
+	end.text(80, 70, 820, 600, 11, 7)
+	if r := New().DetectPage(end.g, detect.Options{KeepHeaders: true}); len(r.Rects) != 1 {
+		t.Fatalf("a chapter end is one page: %+v", r)
+	}
+	title := newSheet(w, h, 23) // title high up, publisher at the foot
+	title.text(200, 150, 700, 330, 22, 14)
+	title.text(300, 1150, 600, 1200, 11, 7)
+	if r := New().DetectPage(title.g, detect.Options{KeepHeaders: true}); len(r.Rects) != 1 {
+		t.Fatalf("a title page is one page: %+v", r)
+	}
 }

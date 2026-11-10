@@ -24,6 +24,7 @@ type analysisFlags struct {
 	exclude       string
 	margin        string
 	keepHeaders   bool
+	autoRotate    bool
 	password      string
 	passwordStdin bool
 	threads       int
@@ -37,6 +38,7 @@ func (f *analysisFlags) register(c *cobra.Command, withPassword bool) {
 	fl.StringVar(&f.exclude, "exclude", "", `pages kept out of clustering, each cropped on its own, e.g. "1-3;10"`)
 	fl.StringVar(&f.margin, "margin", "", `padding around detected content: 3pt, 2mm, 0.1in or 2%`)
 	fl.BoolVar(&f.keepHeaders, "keep-headers", false, "keep running headers, footers and page numbers (no effect on the legacy detector)")
+	fl.BoolVar(&f.autoRotate, "auto-rotate", true, "turn scanned pages whose text is sideways or upside down, before any split (--auto-rotate=false to keep them as they are)")
 	fl.IntVar(&f.threads, "threads", 0, "parallel render workers (default: up to 4, fewer on small machines)")
 	if withPassword {
 		fl.StringVar(&f.password, "password", "", "password of an encrypted PDF")
@@ -59,7 +61,7 @@ func (f *analysisFlags) options(stdin io.Reader) (app.Options, error) {
 	}
 	return app.Options{
 		Password: pw, Exclude: f.exclude, Detector: f.detector, Margin: m,
-		Detect: detect.Options{SplitColumns: f.splitCol, SplitRows: f.splitRow, KeepHeaders: f.keepHeaders},
+		Detect: detect.Options{SplitColumns: f.splitCol, SplitRows: f.splitRow, KeepHeaders: f.keepHeaders, AutoRotate: f.autoRotate},
 	}, nil
 }
 
@@ -117,6 +119,9 @@ func printReport(w io.Writer, rep *app.Report, quiet bool) {
 	}
 	if rep.Crops != "" {
 		fmt.Fprintln(w, "crop definition:", rep.Crops)
+	}
+	if rep.Turned > 0 {
+		fmt.Fprintf(w, "turned %d pages upright\n", rep.Turned)
 	}
 	if rep.Straightened > 0 {
 		fmt.Fprintf(w, "straightened %d pages\n", rep.Straightened)

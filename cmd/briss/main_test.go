@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/jarofclay/briss-go/internal/testpdf"
+	"image"
 	"math"
 	"os"
 	"path/filepath"
@@ -360,5 +362,78 @@ func TestCropNormalize(t *testing.T) {
 	// portrait odd, portrait even and the landscape spreads: at most a few sizes
 	if len(sizes) > 4 {
 		t.Fatalf("too many page sizes after --normalize: %v", sizes)
+	}
+}
+
+// A two-page spread stored sideways (/Rotate 90 on a landscape page) comes
+// out as two upright portrait pages, left page first, with --auto-rotate
+// (the default); --auto-rotate=false leaves it sideways.
+func TestAutoRotateSidewaysSpread(t *testing.T) {
+	words := strings.Fields("the quick brown fox jumps over the lazy dog while a gentle breeze lifts every page of this old book high above the quiet library tables and nobody minds the sound")
+	var lines []testpdf.Line
+	lines = append(lines, testpdf.Paragraph(60, 560, 290, 10, 36, words)...)
+	lines = append(lines, testpdf.Paragraph(440, 560, 290, 10, 36, words[7:])...)
+	doc := testpdf.Doc{Pages: []testpdf.Page{{
+		Media:  testpdf.Box{URX: 792, URY: 612},
+		Rotate: 90,
+		Fill:   []testpdf.Box{{LLX: 60, LLY: 572, URX: 90, URY: 590}}, // a mark at the top left of the left page
+		Lines:  lines,
+	}}}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "sideways.pdf")
+	os.WriteFile(src, testpdf.Build(doc), 0o644)
+	dst := filepath.Join(dir, "out.pdf")
+	code, out, errs := runCLI(t, "crop", src, "--detector", "cv", "--keep-headers", "-o", dst, "--json")
+	mustOK(t, code, out, errs)
+	var rep struct {
+		OutputPages int `json:"output_pages"`
+		Turned      int `json:"turned"`
+	}
+	if err := json.Unmarshal([]byte(out), &rep); err != nil || rep.OutputPages != 2 || rep.Turned != 2 {
+		t.Fatalf("report %+v %v\n%s", rep, err, out)
+	}
+	eng, err := pdf.NewEngine(pdf.EngineOptions{Workers: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer eng.Close()
+	od, err := eng.Open(context.Background(), dst, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, pg := range od.Pages {
+		if pg.Width >= pg.Height {
+			t.Fatalf("page %d is %vx%v, want portrait", i+1, pg.Width, pg.Height)
+		}
+	}
+	// the mark is at the top left of page 1, so page 1 is the left page, upright
+	var img *image.Gray
+	p1 := od.Pages[0]
+	eng.Render(context.Background(), od, []pdf.RenderJob{{Page: 0, Width: 300, Height: int(300 * p1.Height / p1.Width)}}, func(_ pdf.RenderJob, g *image.Gray) error {
+		img = image.NewGray(g.Bounds())
+		copy(img.Pix, g.Pix)
+		return nil
+	})
+	dark := func(x0, y0, x1, y1 int) bool {
+		n := 0
+		for y := y0; y < y1; y++ {
+			for x := x0; x < x1; x++ {
+				if img.Pix[y*img.Stride+x] < 80 {
+					n++
+				}
+			}
+		}
+		return n > (x1-x0)*(y1-y0)/4
+	}
+	w, h := img.Bounds().Dx(), img.Bounds().Dy()
+	if !dark(0, 0, w/8, h/20) || dark(w*7/8, h*19/20, w, h) || dark(w*7/8, 0, w, h/20) {
+		t.Fatalf("page 1 is not the upright left page (mark not at its top left)")
+	}
+
+	keep := filepath.Join(dir, "keep.pdf")
+	code, out, errs = runCLI(t, "crop", src, "--detector", "cv", "--keep-headers", "--auto-rotate=false", "-o", keep, "--json")
+	mustOK(t, code, out, errs)
+	if strings.Contains(out, `"turned"`) {
+		t.Fatalf("--auto-rotate=false must not turn:\n%s", out)
 	}
 }

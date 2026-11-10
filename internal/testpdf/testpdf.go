@@ -25,7 +25,36 @@ type Page struct {
 	Rotate int
 	Fill   []Box  // black filled rectangles
 	Text   string // drawn in Helvetica 12 at (Media.LLX+20, Media.URY-30), unless empty
+	Lines  []Line // more text, anywhere
 	Links  []Link
+}
+
+// Line is one line of Helvetica text with its baseline starting at (X, Y).
+type Line struct {
+	X, Y, Size float64
+	Text       string
+}
+
+// Paragraph lays out words as lines of at most width points starting at
+// (x, y) and going down by 1.3 times size, until n lines are filled.
+func Paragraph(x, y, width, size float64, n int, words []string) []Line {
+	var out []Line
+	cur, k := "", 0
+	for len(out) < n {
+		w := words[k%len(words)]
+		k++
+		next := w
+		if cur != "" {
+			next = cur + " " + w
+		}
+		if float64(len(next))*size*0.5 > width && cur != "" {
+			out = append(out, Line{X: x, Y: y - float64(len(out))*1.3*size, Size: size, Text: cur})
+			cur = w
+			continue
+		}
+		cur = next
+	}
+	return out
 }
 
 // Link is a link annotation on a page. Exactly one of DestName or GoToPage is used:
@@ -101,6 +130,9 @@ func Build(d Doc) []byte {
 		}
 		if p.Text != "" {
 			fmt.Fprintf(&cs, "BT /F1 12 Tf %s %s Td %s Tj ET\n", f(p.Media.LLX+20), f(p.Media.URY-30), pdfString(p.Text))
+		}
+		for _, l := range p.Lines {
+			fmt.Fprintf(&cs, "BT /F1 %s Tf %s %s Td %s Tj ET\n", f(l.Size), f(l.X), f(l.Y), pdfString(l.Text))
 		}
 		content := w.reserve()
 		w.set(content, fmt.Sprintf("<< /Length %d >>\nstream\n%sendstream", cs.Len(), cs.String()))

@@ -29,3 +29,30 @@ func TestCrop(t *testing.T) {
 		t.Fatalf("crop: %v %d", c.Bounds(), c.Pix[0])
 	}
 }
+
+func TestRotateQuarter(t *testing.T) {
+	g := image.NewGray(image.Rect(0, 0, 4, 2))
+	g.Pix[0] = 9 // top-left
+	r := RotateQuarter(g, 90)
+	if r.Bounds().Dx() != 2 || r.Bounds().Dy() != 4 || r.Pix[1] != 9 {
+		t.Fatalf("90: top-left must go to top-right: %v %v", r.Bounds(), r.Pix)
+	}
+	if r := RotateQuarter(g, 180); r.Pix[len(r.Pix)-1] != 9 {
+		t.Fatal("180: top-left must go to bottom-right")
+	}
+	if r := RotateQuarter(g, 270); r.Pix[(4-1)*r.Stride] != 9 {
+		t.Fatal("270: top-left must go to bottom-left")
+	}
+	if back := RotateQuarter(RotateQuarter(g, 90), 270); back.Pix[0] != 9 || back.Bounds() != g.Bounds() {
+		t.Fatal("90 then 270 must be the identity")
+	}
+}
+
+func TestResizeAverages(t *testing.T) {
+	g := image.NewGray(image.Rect(0, 0, 4, 2))
+	copy(g.Pix, []uint8{0, 200, 100, 100, 0, 200, 100, 100})
+	r := Resize(g, 2, 1)
+	if r.Bounds().Dx() != 2 || r.Bounds().Dy() != 1 || r.Pix[0] != 100 || r.Pix[1] != 100 {
+		t.Fatalf("got %v %v", r.Bounds(), r.Pix)
+	}
+}

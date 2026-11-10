@@ -132,6 +132,9 @@ func (r *Result) Definition(opts detect.Options, excluded map[int]bool) (*cropde
 				if as := c.Candidate.PerPageAngles[p]; i < len(as) {
 					cr.Angle = as[i]
 				}
+				if ts := c.Candidate.PerPageTurns[p]; i < len(ts) {
+					cr.Turn = ts[i]
+				}
 				d.PageOverrides[p] = append(d.PageOverrides[p], cr)
 			}
 		}

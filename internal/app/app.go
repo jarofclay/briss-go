@@ -245,6 +245,7 @@ type Report struct {
 	TimingsMS    map[string]int64 `json:"timings_ms"`
 	Warnings     []string         `json:"warnings,omitempty"`
 	Straightened int              `json:"straightened,omitempty"` // output pages turned level
+	Turned       int              `json:"turned,omitempty"`       // output pages turned upright (sideways or upside-down scans)
 	Normalized   bool             `json:"normalized,omitempty"`
 	OCRPages     int              `json:"ocr_pages,omitempty"` // source pages given a text layer
 }
@@ -339,6 +340,9 @@ func Crop(ctx context.Context, eng *pdf.Engine, req CropRequest) (*Report, error
 		for _, o := range os {
 			if o.Angle != 0 {
 				rep.Straightened++
+			}
+			if o.Turn != 0 {
+				rep.Turned++
 			}
 		}
 	}
@@ -587,14 +591,23 @@ func detectPages(ctx context.Context, eng *pdf.Engine, res *pipeline.Result, pd 
 	if err != nil {
 		return err
 	}
+	if opts.AutoRotate {
+		if err := followMajorityTurn(ctx, eng, res, pd, opts, jobs, results); err != nil {
+			return err
+		}
+	}
 	for _, c := range res.Clusters {
-		cand := detect.Candidate{Source: pd.Name(), PerPage: map[int][]geom.Ratios{}, PerPageAngles: map[int][]float64{}, Confidence: 1}
-		split := 0
+		cand := detect.Candidate{Source: pd.Name(), PerPage: map[int][]geom.Ratios{}, PerPageAngles: map[int][]float64{}, PerPageTurns: map[int][]int{}, Confidence: 1}
+		split, turned := 0, 0
 		for _, p := range c.Cluster.Pages {
 			r := results[p-1]
 			cand.PerPage[p] = r.Rects
 			if len(r.Angles) == len(r.Rects) {
 				cand.PerPageAngles[p] = r.Angles
+			}
+			if len(r.Turns) == len(r.Rects) && len(r.Turns) > 0 {
+				cand.PerPageTurns[p] = r.Turns
+				turned++
 			}
 			cand.Confidence = math.Min(cand.Confidence, r.Confidence)
 			if len(r.Rects) > 1 {
@@ -602,10 +615,66 @@ func detectPages(ctx context.Context, eng *pdf.Engine, res *pipeline.Result, pd 
 			}
 		}
 		cand.Notes = fmt.Sprintf("detected page by page; %d of %d pages split into two", split, len(c.Cluster.Pages))
+		if turned > 0 {
+			cand.Notes += fmt.Sprintf("; %d turned upright", turned)
+		}
 		c.Candidate = cand
 	}
 	res.Timings.Detect = time.Since(t0)
 	return nil
+}
+
+// followMajorityTurn gives the pages whose orientation could not be judged
+// (covers, pictures, nearly blank pages) the turn that most judged pages of
+// their cluster got: a scanner stores every sheet of a batch the same way.
+// Clusters keep odd and even pages apart, so a duplex scan whose back sides
+// come out upside down is handled too.
+func followMajorityTurn(ctx context.Context, eng *pdf.Engine, res *pipeline.Result, pd detect.PageDetector, opts detect.Options, jobs []pdf.RenderJob, results []detect.PageResult) error {
+	force := map[int]int{} // 0-based page -> turn
+	for _, c := range res.Clusters {
+		votes, sure := map[int]int{}, 0
+		for _, p := range c.Cluster.Pages {
+			if r := results[p-1]; r.TurnSure {
+				t := 0
+				if len(r.Turns) > 0 {
+					t = r.Turns[0]
+				}
+				votes[t]++
+				sure++
+			}
+		}
+		best, n := 0, 0
+		for t, v := range votes {
+			if v > n {
+				best, n = t, v
+			}
+		}
+		if best == 0 || sure < 3 || 5*n < 3*sure { // no turn, too few votes or no clear majority
+			continue
+		}
+		for _, p := range c.Cluster.Pages {
+			if !results[p-1].TurnSure {
+				force[p-1] = best
+			}
+		}
+	}
+	if len(force) == 0 {
+		return nil
+	}
+	var again []pdf.RenderJob
+	for _, j := range jobs {
+		if _, ok := force[j.Page]; ok {
+			again = append(again, j)
+		}
+	}
+	return eng.Render(ctx, res.Doc, again, func(j pdf.RenderJob, g *image.Gray) error {
+		o := opts
+		o.AutoRotate, o.ForceTurn = false, force[j.Page]
+		r := pd.DetectPage(g, o)
+		r.Notes = strings.TrimSpace("turned like the rest; " + r.Notes)
+		results[j.Page] = r // distinct index per job
+		return nil
+	})
 }
 
 // previewPages draws each page's rectangles on the page itself.

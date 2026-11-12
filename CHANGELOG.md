@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+* The macOS app downloads are sealed with an ad-hoc signature, so macOS no longer says
+  Briss "is damaged and can't be opened"; the first start still has to be allowed once
+  with **Open Anyway** (README, "First start on a Mac"), because the app is not notarized.
+* The GUI workflow can be run by hand with `release_tag` to rebuild the app downloads and
+  replace them on an existing release.
+
 ## [2.0-beta] - 2026-11-10
 Briss rewritten in Go: a dark drop-and-go desktop app and a command line, with automatic
 crop detection for scanned books (two-page spreads, binding shadows, page edges),

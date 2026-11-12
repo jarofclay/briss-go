@@ -1,6 +1,7 @@
 # Desktop app: test it, then build ready-to-run downloads for Linux, macOS
 # (Apple silicon and Intel) and Windows. On a v* tag the downloads are also
-# attached to the release goreleaser drafts for that tag (release.yml). Fyne needs cgo and OpenGL headers,
+# attached to the release goreleaser drafts for that tag (release.yml); a manual
+# run with "release_tag" set replaces them on that release. Fyne needs cgo and OpenGL headers,
 # which the runners have (Linux gets them from apt), so people who only want
 # to use Briss do not have to install a C compiler. Find the files under
 # Actions > GUI > the latest run > Artifacts.
@@ -16,6 +17,11 @@ on:
     branches: [master]
     paths: ["gui/**", "internal/**", "go.mod", "go.sum", ".github/workflows/gui.yml"]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Also attach the downloads to the release for this tag (for example v2.0.0-beta), replacing files of the same name"
+        required: false
+        default: ""
 
 jobs:
   build:
@@ -80,6 +86,12 @@ jobs:
             </dict></array>
           </dict></plist>
           PLIST
+            # Seal the bundle with an ad-hoc signature. Without it the program keeps only
+            # the Go linker's placeholder signature (or none, for Intel) and macOS reports
+            # the downloaded app as damaged, with no way to open it anyway.
+            codesign --force --sign - "$app"
+            codesign --verify --strict --verbose=2 "$app"
+            codesign --display --verbose=2 "$app" 2>&1 | grep -E '^(Identifier|Format|Signature|Sealed Resources)'
             suffix=$([ $arch = arm64 ] && echo apple-silicon || echo intel)
             (cd ../dist/$arch && ditto -c -k --keepParent Briss.app ../Briss-macos-$suffix.zip)
           done
@@ -92,19 +104,20 @@ jobs:
           go build -trimpath -ldflags "-H windowsgui -s -w" -o ../dist/Briss.exe .
           cd ../dist && 7z a -tzip Briss-windows-amd64.zip Briss.exe ../LICENSE.txt
       - name: Attach to the release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
           shopt -s nullglob
           files=(dist/*.tar.gz dist/*.zip)
           # goreleaser creates the (draft) release; wait for it
           for i in $(seq 1 90); do
-            gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && break
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && break
             sleep 10
           done
-          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$TAG" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}

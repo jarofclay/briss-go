@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Briss 2.0 · Scanned books, made readable</title>
+<meta name="description" content="Briss crops PDF pages so the text fills your e-reader, tablet or phone. It finds the printed area of every page, cuts away scanner borders and margins, and splits two-page scans into single pages. Free desktop app and command line for Linux, macOS and Windows.">
+<link rel="canonical" href="https://briss.app/">
+<meta name="theme-color" content="#0b0b0e">
+<meta name="color-scheme" content="dark">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://briss.app/">
+<meta property="og:title" content="Briss 2.0 · Scanned books, made readable">
+<meta property="og:description" content="Cuts scanner borders and margins from PDFs and splits two-page scans into single pages. Free desktop app and command line.">
+<meta property="og:image" content="https://briss.app/assets/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preload" href="assets/fonts/fraunces-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/demo/sheet-1.webp" as="image">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav">
+  <a class="brand" href="#top" aria-label="Briss, home">briss<i></i></a>
+  <nav aria-label="Sections">
+    <a href="#how">How it works</a>
+    <a href="#app">Desktop app</a>
+    <a href="#cli">Command line</a>
+    <a href="https://github.com/jarofclay/briss-go" rel="noopener">GitHub</a>
+  </nav>
+  <a class="btn small" href="#download">Download</a>
+</header>
+
+<main id="main">
+
+<section class="hero" id="top">
+  <p class="eyebrow"><span class="tag">2.0 beta</span> Free and open source · Linux, macOS, Windows</p>
+  <h1>Scanned books, <em>made readable.</em></h1>
+  <p class="lede">Briss finds the printed area of every page, cuts away the scanner borders and margins, and splits two-page scans into single pages, so the text fills your e-reader, tablet or phone.</p>
+  <div class="cta">
+    <a class="btn" href="#download">Download Briss</a>
+    <a class="btn ghost" href="#cli"><span class="mono">$ briss crop book.pdf</span></a>
+  </div>
+</section>
+
+<section class="demo" id="how" aria-labelledby="demo-title">
+  <h2 class="sr" id="demo-title">How Briss turns a scan into pages</h2>
+  <div class="stage-wrap">
+    <div class="stage" data-step="0" role="img" aria-label="Animation: a scanned two-page sheet is detected, split into its left and right page, straightened, cropped and shown full-screen on a tablet.">
+      <img class="scan" src="assets/demo/sheet-1.webp" alt="" width="1800" height="1276">
+      <div class="dim"></div>
+      <div class="sweep"></div>
+
+      <div class="cut c1"><div class="clip"><img src="assets/demo/sheet-1.webp" alt=""></div><b>1</b></div>
+      <div class="cut c2"><div class="clip"><img src="assets/demo/sheet-1.webp" alt=""></div><b>2</b></div>
+      <div class="gutter"></div>
+
+      <img class="out o1" src="assets/demo/page-1.webp" alt="" width="900" height="1426">
+      <img class="out o2" src="assets/demo/page-2.webp" alt="" width="900" height="1332">
+
+      <div class="devices">
+        <figure class="device before">
+          <div class="screen"><img src="assets/demo/sheet-1.webp" alt=""></div>
+          <figcaption>The scan</figcaption>
+        </figure>
+        <div class="arrow" aria-hidden="true">→</div>
+        <figure class="device after">
+          <div class="screen"><img src="assets/demo/page-1.webp" alt=""></div>
+          <figcaption>After Briss</figcaption>
+        </figure>
+      </div>
+    </div>
+
+    <div class="steps">
+      <button class="play" type="button" aria-label="Pause the animation" aria-pressed="false">
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path class="i-pause" d="M4 3h3v10H4zM9 3h3v10H9z"/><path class="i-play" d="M4 2.5v11l9-5.5z"/></svg>
+      </button>
+      <ol>
+        <li><button type="button" data-go="0" aria-current="step"><span>1</span>Scan</button></li>
+        <li><button type="button" data-go="1"><span>2</span>Find the pages</button></li>
+        <li><button type="button" data-go="2"><span>3</span>Split</button></li>
+        <li><button type="button" data-go="3"><span>4</span>Straighten</button></li>
+        <li><button type="button" data-go="4"><span>5</span>Crop</button></li>
+        <li><button type="button" data-go="5"><span>6</span>Read</button></li>
+      </ol>
+    </div>
+    <p class="caption" id="caption">A book laid open on the scanner: two pages per sheet, a dark border, a shadow in the gutter, and everything leaning a degree and a half.</p>
+    <p class="fineprint">These are not mock-ups. The sheet is a synthetic scan; the boxes, the pages and the numbers below are what Briss 2.0 beta produced from it.</p>
+  </div>
+</section>
+
+<section class="facts" aria-label="In short">
+  <div><strong>290 pages</strong><span>cropped in about half a second</span></div>
+  <div><strong>0 pixels</strong><span>re-encoded: text and vectors stay as they are</span></div>
+  <div><strong>1 file</strong><span>no Java, no libraries to install</span></div>
+  <div><strong>3 systems</strong><span>Linux, macOS and Windows</span></div>
+</section>
+
+<section class="features" aria-labelledby="feat-title">
+  <header class="sec">
+    <p class="kicker">What it does</p>
+    <h2 id="feat-title">Every sheet is measured for itself.</h2>
+    <p>On scans, Briss looks at each page on its own. It ignores scanner borders, binding shadows, page edges and dust, and works out what a careful person would keep.</p>
+  </header>
+
+  <div class="grid">
+    <article class="card wide">
+      <div class="art art-split" aria-hidden="true">
+        <img src="assets/demo/preview-1.webp" alt="" loading="lazy" width="900" height="638">
+      </div>
+      <h3>Two-page spreads become two pages</h3>
+      <p>A sheet holding a left and a right page is cut at the gutter, in reading order. A blank side produces no page. Sheets with two pages one above the other are cut into a top and a bottom page.</p>
+    </article>
+
+    <article class="card">
+      <div class="art art-rotate" aria-hidden="true">
+        <img class="side" src="assets/demo/sheet-3.webp" alt="" loading="lazy" width="900" height="1269">
+        <span>→</span>
+        <img class="up" src="assets/demo/page-5.webp" alt="" loading="lazy" width="900" height="1426">
+      </div>
+      <h3>Sideways scans turned upright</h3>
+      <p>Pages stored sideways or upside down are turned before anything else, so a spread scanned sideways still comes out as its left and right page.</p>
+    </article>
+
+    <article class="card">
+      <div class="art art-level" aria-hidden="true">
+        <div class="lines tilt"><i></i><i></i><i></i><i></i><i></i></div>
+      </div>
+      <h3>Leaning pages made level</h3>
+      <p>Each page is straightened by its own angle, without re-encoding the scan.</p>
+    </article>
+
+    <article class="card">
+      <div class="art art-ocr" aria-hidden="true">
+        <p>the book that was a <mark>photograph of a book</mark> becomes once more a thing that can be read.</p>
+      </div>
+      <h3>Selectable, searchable text</h3>
+      <p>Scanned pages get an invisible text layer you can search, select and copy, read by Tesseract.</p>
+    </article>
+
+    <article class="card">
+      <div class="art art-cols" aria-hidden="true">
+        <div class="col"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="col"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      </div>
+      <h3>Columns and halves</h3>
+      <p>Split two-column papers into one column per page, or every page into a top and a bottom half, for small screens. No line is cut in two.</p>
+    </article>
+
+    <article class="card">
+      <div class="art art-same" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <h3>One page size</h3>
+      <p>Every left page and every right page comes out the same size, so the text does not swell and shrink as you turn pages.</p>
+    </article>
+
+    <article class="card">
+      <div class="art art-keep" aria-hidden="true">
+        <ul><li>Contents</li><li>Chapter I</li><li>Chapter II</li><li class="on">Chapter III</li></ul>
+      </div>
+      <h3>The document keeps working</h3>
+      <p>Bookmarks, links, named destinations and encryption survive cropping and splitting. Only the visible page box changes.</p>
+    </article>
+
+    <article class="card">
+      <div class="art art-head" aria-hidden="true">
+        <div class="pg"><span>34</span><em>A Reader’s Companion</em><i></i><i></i><i></i></div>
+      </div>
+      <h3>Headers and page numbers: your call</h3>
+      <p>Keep running headers, footers and page numbers inside the crop, or let them go with the margins. Chosen once for the whole book.</p>
+    </article>
+
+    <article class="card">
+      <div class="art art-born" aria-hidden="true">
+        <div class="sheet"><div class="box"></div></div>
+      </div>
+      <h3>Ebooks and papers too</h3>
+      <p>Born-digital PDFs use the original Briss auto-crop: pages are grouped by size and by odd or even side, and each group gets one crop.</p>
+    </article>
+  </div>
+</section>
+
+<section class="app" id="app" aria-labelledby="app-title">
+  <header class="sec">
+    <p class="kicker">The desktop app</p>
+    <h2 id="app-title">Drop a PDF in. Get it back cropped.</h2>
+    <p>Each file is cropped straight away and saved next to the original as <span class="mono">NAME_cropped.pdf</span>. Folders work too.</p>
+  </header>
+
+  <div class="shots">
+    <figure class="win big">
+      <div class="bar"><i></i><i></i><i></i></div>
+      <img src="assets/img/gui-preview.webp" alt="The Briss preview window: a scanned two-page sheet with a blue crop box around each page, and the two resulting pages on the right." loading="lazy" width="1100" height="760">
+      <figcaption><strong>Look before it saves.</strong> Preview mode shows every sheet with its crop boxes and, on the right, the pages as they will come out. Drag an edge to resize a box, drag inside to move it, draw a new one on empty space.</figcaption>
+    </figure>
+    <figure class="win">
+      <div class="bar"><i></i><i></i><i></i></div>
+      <img src="assets/img/gui-jobs.webp" alt="The Briss window listing four finished PDFs with page counts." loading="lazy" width="560" height="620">
+      <figcaption><strong>Drop and go.</strong> A 118-page scan, a 290-page book: done, with a button to open each result.</figcaption>
+    </figure>
+    <figure class="win">
+      <div class="bar"><i></i><i></i><i></i></div>
+      <img src="assets/img/gui-options.webp" alt="The Briss options panel: mode, margin, same page size, OCR, straighten, auto-rotate, split and keep headers." loading="lazy" width="560" height="620">
+      <figcaption><strong>Nine options, good defaults.</strong> Margin, OCR, straighten, auto-rotate, splitting, headers and page numbers. Remembered between runs.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="cli" id="cli" aria-labelledby="cli-title">
+  <header class="sec">
+    <p class="kicker">The command line</p>
+    <h2 id="cli-title">One command for a whole book.</h2>
+    <p>The same engine, scriptable. Detect, look, correct, apply; JSON output and exit codes for pipelines. The Briss 2.0 options <span class="mono">-s</span> and <span class="mono">-d</span> still work.</p>
+  </header>
+
+  <div class="term" data-term>
+    <div class="term-bar">
+      <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="tabs" role="tablist" aria-label="Examples">
+        <button role="tab" id="tab-crop" aria-controls="pane-crop" aria-selected="true" type="button">crop</button>
+        <button role="tab" id="tab-preview" aria-controls="pane-preview" aria-selected="false" tabindex="-1" type="button">preview</button>
+        <button role="tab" id="tab-review" aria-controls="pane-review" aria-selected="false" tabindex="-1" type="button">detect &amp; apply</button>
+        <button role="tab" id="tab-more" aria-controls="pane-more" aria-selected="false" tabindex="-1" type="button">more</button>
+      </div>
+    </div>
+
+    <div class="pane" role="tabpanel" id="pane-crop" aria-labelledby="tab-crop">
+<pre><code><span class="cmd">briss crop "A Reader's Companion.pdf" --straighten --normalize --keep-headers --margin 6pt</span>
+<span class="out">A Reader's Companion.pdf: 3 pages, 3 clusters (cv@1)
+  cluster 0, odd pages 1, 1056x749 pt:
+    <span class="dimmed">note: auto: 3 of 3 sampled pages are scans; detected page by page;</span> <span class="hl">1 of 1 pages split into two</span>
+  cluster 1, even pages 2, 1056x749 pt:
+    <span class="dimmed">note: auto: 3 of 3 sampled pages are scans; detected page by page;</span> <span class="hl">1 of 1 pages split into two</span>
+  cluster 2, odd pages 3, 749x1056 pt:
+    <span class="dimmed">note: auto: 3 of 3 sampled pages are scans; detected page by page;</span> <span class="hl">1 of 1 pages split into two; 1 turned upright</span>
+turned 2 pages upright
+straightened 6 pages
+<span class="ok">wrote A Reader's Companion_cropped.pdf: 6 pages (3 added by splits) in 1065 ms</span></span></code></pre>
+      <div class="strip" aria-label="The six pages written by this command">
+        <img src="assets/demo/page-1.webp" alt="Output page 1" loading="lazy" width="900" height="1426">
+        <img src="assets/demo/page-2.webp" alt="Output page 2" loading="lazy" width="900" height="1332">
+        <img src="assets/demo/page-3.webp" alt="Output page 3" loading="lazy" width="900" height="1426">
+        <img src="assets/demo/page-4.webp" alt="Output page 4" loading="lazy" width="900" height="1332">
+        <img src="assets/demo/page-5.webp" alt="Output page 5" loading="lazy" width="900" height="1426">
+        <img src="assets/demo/page-6.webp" alt="Output page 6" loading="lazy" width="900" height="1332">
+      </div>
+    </div>
+
+    <div class="pane" role="tabpanel" id="pane-preview" aria-labelledby="tab-preview" hidden>
+<pre><code><span class="cmd">briss preview "A Reader's Companion.pdf" --keep-headers --out preview</span>
+<span class="out">preview/A Reader's Companion_page001.png
+preview/A Reader's Companion_page002.png
+preview/A Reader's Companion_page003.png</span></code></pre>
+      <div class="strip previews">
+        <img src="assets/demo/preview-1.webp" alt="Preview of sheet 1: the area that would be cut is tinted red, the two kept rectangles are numbered 1 and 2." loading="lazy" width="900" height="638">
+        <img src="assets/demo/preview-2.webp" alt="Preview of sheet 2, leaning the other way." loading="lazy" width="900" height="638">
+        <img src="assets/demo/preview-3.webp" alt="Preview of sheet 3, which was scanned sideways." loading="lazy" width="900" height="1269">
+      </div>
+      <p class="note">One PNG per sheet. What would be cut away is tinted red; each rectangle is numbered in output order.</p>
+    </div>
+
+    <div class="pane" role="tabpanel" id="pane-review" aria-labelledby="tab-review" hidden>
+<pre><code><span class="cmd">briss detect scan.pdf --keep-headers --save-crops scan.crops.json</span>
+<span class="out"><span class="dimmed">scan.pdf: 3 pages, 3 clusters (cv@1) ...</span>
+crop definition: scan.crops.json</span>
+
+<span class="cmd">cat scan.crops.json</span>
+<span class="out">  "page_overrides": {
+    "1": [{"l": 0.136, "b": 0.142, "r": 0.547, "t": 0.149, "angle": -1.63},
+          {"l": 0.557, "b": 0.212, "r": 0.124, "t": 0.129, "angle": -1.54}],
+    "3": [{"l": 0.139, "b": 0.139, "r": 0.212, "t": 0.548, "angle": -0.68, <span class="hl">"turn": 90</span>}, ...</span>
+
+<span class="cmd">briss apply scan.pdf --crops scan.crops.json -o book.pdf</span>
+<span class="out">turned 2 pages upright
+<span class="ok">wrote book.pdf: 6 pages (3 added by splits) in 7 ms</span></span></code></pre>
+      <p class="note">Each rectangle says how much of the sheet is cut from the left, bottom, right and top, as a fraction. Edit the numbers, then apply the file.</p>
+    </div>
+
+    <div class="pane" role="tabpanel" id="pane-more" aria-labelledby="tab-more" hidden>
+<pre><code><span class="cmd">briss crop paper.pdf --split-col</span>              <span class="cmt"># two-column pages into two pages each</span>
+<span class="cmd">briss crop book.pdf -o small.pdf --margin 3pt</span>  <span class="cmt"># leave 3 points of margin</span>
+<span class="cmd">briss crop scan.pdf --ocr --ocr-lang eng+deu</span>   <span class="cmt"># selectable text, two languages</span>
+<span class="cmd">briss crop book.pdf --exclude "1-3;10"</span>         <span class="cmt"># covers and plates cropped on their own</span>
+<span class="cmd">briss crop book.pdf --dry-run --json</span>           <span class="cmt"># report what would be cut, write nothing</span>
+<span class="cmd">briss -s in.pdf -d out.pdf --split-col</span>         <span class="cmt"># the Briss 2.0 command line still works</span></code></pre>
+      <p class="note">Exit codes: 0 done, 1 wrong command line, 2 unreadable input, 3 detector not available, 4 could not write the output.</p>
+    </div>
+  </div>
+</section>
+
+<section class="download" id="download" aria-labelledby="dl-title">
+  <header class="sec">
+    <p class="kicker">Download</p>
+    <h2 id="dl-title">Get Briss 2.0 beta.</h2>
+    <p>Free software under the GPL v3. It works on real books, but it is a beta and has only been tried on a few machines: please report what goes wrong.</p>
+  </header>
+
+  <div class="os">
+    <a class="oscard" data-os="mac" href="https://github.com/jarofclay/briss-go/releases" rel="noopener">
+      <h3>macOS</h3>
+      <p class="mono">Briss-macos-apple-silicon.zip<br>Briss-macos-intel.zip</p>
+      <p>Unzip and drag Briss.app to Applications. It is not signed yet: the first time, right-click it and choose Open.</p>
+    </a>
+    <a class="oscard" data-os="win" href="https://github.com/jarofclay/briss-go/releases" rel="noopener">
+      <h3>Windows</h3>
+      <p class="mono">Briss-windows-amd64.zip</p>
+      <p>Run Briss.exe. If SmartScreen warns about an unknown publisher, choose More info, then Run anyway.</p>
+    </a>
+    <a class="oscard" data-os="linux" href="https://github.com/jarofclay/briss-go/releases" rel="noopener">
+      <h3>Linux</h3>
+      <p class="mono">Briss-linux-amd64.tar.gz</p>
+      <p>Unpack and run <span class="mono">Briss/briss-gui</span>.</p>
+    </a>
+  </div>
+
+  <div class="extras">
+    <div>
+      <h3>Command line only</h3>
+      <p>The same releases page has <span class="mono">briss</span> as a single program file for each system. Or build it with Go:</p>
+<pre class="snippet"><code>git clone https://github.com/jarofclay/briss-go.git
+cd briss-go
+go build -o briss ./cmd/briss</code></pre>
+    </div>
+    <div>
+      <h3>For selectable text</h3>
+      <p>OCR uses <a href="https://tesseract-ocr.github.io" rel="noopener">Tesseract</a>, installed separately. Briss finds it on its own.</p>
+<pre class="snippet"><code>brew install tesseract          <span class="cmt"># macOS</span>
+sudo apt install tesseract-ocr  <span class="cmt"># Debian, Ubuntu</span></code></pre>
+      <p>On Windows, use the <a href="https://github.com/UB-Mannheim/tesseract/wiki" rel="noopener">UB Mannheim installer</a>.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <a class="brand" href="#top" aria-label="Briss, back to top">briss<i></i></a>
+  <p>Briss 2.0 beta is a rewrite in Go of Briss, the PDF cropping tool started by Gerhard Aigner in 2010. Free software, GNU GPL v3.</p>
+  <nav aria-label="Project links">
+    <a href="https://github.com/jarofclay/briss-go" rel="noopener">Source</a>
+    <a href="https://github.com/jarofclay/briss-go/releases" rel="noopener">Releases</a>
+    <a href="https://github.com/jarofclay/briss-go/issues" rel="noopener">Report a problem</a>
+    <a href="https://github.com/jarofclay/briss-go/blob/master/README.md" rel="noopener">Documentation</a>
+  </nav>
+</footer>
+
+<script src="main.js" defer></script>
+</body>
+</html>

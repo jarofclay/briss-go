@@ -45,6 +45,27 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   engine compiles while it runs.
   The release workflow now runs on a Mac and can be run by hand for a snapshot build.
 
+* **Same page size** now gives every output page one size, the largest, left and right
+  pages alike: a split two-page scan used to come out with its even and odd pages at
+  different widths. A page shows more of its own margin where there is some and blank
+  space where the page, or the facing page of a spread, begins (the writer makes the
+  page larger than what it shows and clips the rest). Landscape pages, like a fold-out
+  map, are sized among themselves so they do not widen the book's pages.
+* The mode switch (Auto, Preview, Preview only) moved from the options panel to the middle
+  of the header.
+* The preview is one window for every file waiting for review. Page navigation (first,
+  previous, next, last, and the page number) is in a bar at the top, next to buttons that
+  step between the files (also `[` and `]`); the sheet and the result pages are headed
+  **Source** and **Output**. **Save** is there in every mode, Preview only included, and
+  moves on to the next file still waiting. Edits stay with each file while the window
+  is open.
+* `scripts/macos/build-app.sh` builds `Briss.app` and its zip on a Mac exactly as CI does
+  (the GUI workflow now calls it); `scripts/macos/sign.sh` also notarizes with a
+  `notarytool` keychain profile (`MACOS_NOTARY_PROFILE`), for signing on your own Mac.
+  The repository variable `MACOS_RUNNER` picks another macOS runner type when
+  `macos-latest` has none free.
+* The site's favicon is the logo, with a PNG fallback and an Apple touch icon.
+
 ## [2.0-beta] - 2026-11-10
 Briss rewritten in Go: a dark drop-and-go desktop app and a command line, with automatic
 crop detection for scanned books (two-page spreads, binding shadows, page edges),

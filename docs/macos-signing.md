@@ -121,6 +121,43 @@ the same for the two apps before it attaches them. Once a signed release is out,
 update **First start on a Mac** in the README and the release notes: the Open Anyway
 steps are then only needed for older downloads.
 
+## On your own Mac
+
+Once the certificate from step 1 is in your login keychain, you can sign and notarize a
+build on your Mac without GitHub. Save the notary key in the keychain once (it asks for
+the key's file, its ID and the Issuer ID from step 3):
+
+```bash
+xcrun notarytool store-credentials briss-notary --key AuthKey_XXXXXXXXXX.p8 --key-id XXXXXXXXXX --issuer YOUR-ISSUER-ID
+```
+
+Then build with your certificate's name as Keychain Access shows it:
+
+```bash
+MACOS_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" MACOS_NOTARY_PROFILE=briss-notary scripts/macos/build-app.sh
+```
+
+`dist/Briss-macos-apple-silicon.zip` is then signed, notarized and stapled, ready to
+pass on (`scripts/macos/build-app.sh amd64` makes the Intel one). Without
+`MACOS_NOTARY_PROFILE` it is signed only; with neither variable it gets an ad-hoc
+signature, which is enough on the Mac that built it. The command line is signed and
+notarized the same way:
+
+```bash
+go build -o briss ./cmd/briss && MACOS_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" MACOS_NOTARY_PROFILE=briss-notary scripts/macos/sign.sh briss
+```
+
+## When GitHub has no Mac free
+
+GitHub's `macos-latest` machines are sometimes all busy, and a job waits and is then
+cancelled ("not acquired by Runner"). The workflows take another macOS runner type from
+the repository variable `MACOS_RUNNER`: **Settings → Secrets and variables → Actions →
+Variables → New repository variable**, name `MACOS_RUNNER`, value for example
+`macos-15`, `macos-14` or `macos-15-intel` (the [runner
+list](https://docs.github.com/en/actions/using-github-hosted-runners/using-github-hosted-runners/about-github-hosted-runners#standard-github-hosted-runners-for-public-repositories)
+names the current ones). Delete the variable to go back to `macos-latest`. Or build on
+your own Mac as above.
+
 ## How it works, and what to watch
 
 - `scripts/macos/signing-setup.sh` puts the certificate into a throwaway keychain and

@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-latest
+    runs-on: ${{ vars.MACOS_RUNNER || 'macos-latest' }} # see docs/macos-signing.md
     steps:
       - uses: actions/checkout@v4
         with:

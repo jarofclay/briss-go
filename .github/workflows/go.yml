@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, "${{ vars.MACOS_RUNNER || 'macos-latest' }}", windows-latest]
     runs-on: ${{ matrix.os }}
     env:
       BRISS_WAZERO_CACHE: ${{ github.workspace }}/.wazero-cache

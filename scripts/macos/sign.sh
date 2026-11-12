@@ -9,7 +9,9 @@
 # it an .app gets an ad-hoc signature, so macOS offers "Open Anyway" instead of
 # calling it damaged, and a bare program is left as the Go linker made it.
 # GOOS lets goreleaser call this for every build: anything but darwin is skipped.
-# Notarizing needs MACOS_NOTARY_KEY_PATH, MACOS_NOTARY_KEY_ID and MACOS_NOTARY_ISSUER_ID.
+# Notarizing needs either MACOS_NOTARY_PROFILE, a profile saved on this Mac with
+# "xcrun notarytool store-credentials" (handy on your own Mac), or the API key
+# in MACOS_NOTARY_KEY_PATH, MACOS_NOTARY_KEY_ID and MACOS_NOTARY_ISSUER_ID (CI).
 set -euo pipefail
 
 path=$1
@@ -33,14 +35,17 @@ codesign --force --timestamp --options runtime --entitlements "$here/entitlement
 codesign --verify --strict --verbose=1 "$path"
 echo "Signed $path with the Developer ID."
 
-if [ -z "${MACOS_NOTARY_KEY_PATH:-}" ]; then
-	echo "sign.sh: no notary key, $path is signed but not notarized"
+if [ -n "${MACOS_NOTARY_PROFILE:-}" ]; then
+	notary=(--keychain-profile "$MACOS_NOTARY_PROFILE")
+elif [ -n "${MACOS_NOTARY_KEY_PATH:-}" ]; then
+	notary=(--key "$MACOS_NOTARY_KEY_PATH" --key-id "${MACOS_NOTARY_KEY_ID:?}" --issuer "${MACOS_NOTARY_ISSUER_ID:?}")
+else
+	echo "sign.sh: no notary profile or key, $path is signed but not notarized"
 	exit 0
 fi
 work=$(mktemp -d)
 zip=$work/$(basename "$path").zip
 ditto -c -k --keepParent "$path" "$zip"
-notary=(--key "$MACOS_NOTARY_KEY_PATH" --key-id "${MACOS_NOTARY_KEY_ID:?}" --issuer "${MACOS_NOTARY_ISSUER_ID:?}")
 out=$(xcrun notarytool submit "$zip" "${notary[@]}" --wait --timeout 30m --output-format json)
 echo "$out"
 if ! grep -Eq '"status" *: *"Accepted"' <<<"$out"; then

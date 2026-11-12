@@ -43,6 +43,7 @@ type ui struct {
 	pwDialog *dialog.FormDialog // the password prompt on screen, if any
 	pwJob    *Job               // the file it asks for
 	pwQueue  []*Job             // files waiting for their prompt
+	pv       *previewWin        // the preview window, while it is open
 	picking  bool               // a file picker is open
 }
 
@@ -92,7 +93,12 @@ func (u *ui) build() fyne.CanvasObject {
 	u.optsBtn = NewIconButton("sliders", 18, u.toggleOptions)
 	u.clearBtn = NewIconButton("clear", 18, u.clearFinished)
 	u.clearBtn.Hide()
-	header := container.NewBorder(nil, nil, brand, container.NewHBox(u.clearBtn, u.optsBtn))
+	// the mode is the one choice made for every batch, so it sits in the header
+	mode := NewSegmented([]string{"Auto", "Preview", "Preview only"}, u.settings.Mode, func(i int) {
+		u.settings.Mode = i
+		u.settings.save(u.a.Preferences())
+	})
+	header := container.NewBorder(nil, nil, brand, container.NewHBox(u.clearBtn, u.optsBtn), container.NewCenter(mode))
 
 	u.panel = u.optionsPanel()
 	u.panel.Hide()
@@ -145,7 +151,6 @@ func label(s string) *canvas.Text {
 func (u *ui) optionsPanel() *fyne.Container {
 	s := &u.settings
 	save := func() { s.save(u.a.Preferences()) }
-	mode := NewSegmented([]string{"Auto", "Preview", "Preview only"}, s.Mode, func(i int) { s.Mode = i; save() })
 
 	marginVal := label(fmt.Sprintf("%.0f pt", s.MarginPt))
 	slider := widget.NewSlider(0, 36)
@@ -167,7 +172,6 @@ func (u *ui) optionsPanel() *fyne.Container {
 		return container.NewBorder(nil, nil, container.NewCenter(l), c)
 	}
 	rows := container.NewVBox(
-		row(label("Mode"), mode),
 		row(label("Margin"), container.NewBorder(nil, nil, nil, marginVal, container.NewGridWrap(fyne.NewSize(180, 30), slider))),
 		row(label("Same page size"), toggle(&s.Normalize)),
 		row(ocrLabel, ocrSwitch),
@@ -227,7 +231,7 @@ func (u *ui) addPaths(paths []string) {
 			continue
 		}
 		j := &Job{Src: p, Dst: dst, settings: u.settings}
-		j.row = newJobRow(j, func() { u.openFile(j.Dst) }, func() { u.openPreview(j) }, func() { u.askPassword(j, j.wrong) })
+		j.row = newJobRow(j, func() { u.openFile(j.Dst) }, func() { u.showPreview(j) }, func() { u.askPassword(j, j.wrong) })
 		u.jobs = append(u.jobs, j)
 		u.jobsBox.Add(j.row.box)
 		u.run.add(j)

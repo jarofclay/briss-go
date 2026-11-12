@@ -129,8 +129,10 @@ func TestPasswordPrompt(t *testing.T) {
 	}
 }
 
-// TestScreenshots writes PNGs of the main screens to BRISS_GUI_SHOTS; with
-// BRISS_GUI_SAMPLE=scan.pdf it also shows that scan in the preview.
+// TestScreenshots writes PNGs of the main screens to BRISS_GUI_SHOTS (the
+// README's docs/img/gui-*.png); with BRISS_GUI_SAMPLE=scan.pdf it also shows
+// that scan in the preview, as two files to step between. The README's
+// screenshots use scan_twoup.pdf from spike/tools/gen_corpus.py.
 func TestScreenshots(t *testing.T) {
 	out := os.Getenv("BRISS_GUI_SHOTS")
 	if out == "" {
@@ -180,11 +182,26 @@ func TestScreenshots(t *testing.T) {
 	})
 	shot(u.w, "3-jobs.png")
 
+	// a protected PDF waiting for its password, in a window of its own
+	pu := newUI(a)
+	pu.settings.OCR = false
+	pu.w.Resize(fyne.NewSize(560, 620))
+	locked := filepath.Join(dir, "Annual Report (locked).pdf")
+	copyFile(t, "../testdata/pdfs/example-protected.pdf", locked)
+	fyne.DoAndWait(func() { pu.addPaths([]string{locked}) })
+	waitFor(t, 60*time.Second, func() bool { return pu.jobs[0].state == stateLocked && pu.pwDialog != nil })
+	time.Sleep(500 * time.Millisecond)
+	shot(pu.w, "5-password.png")
+
 	if sample != "" {
 		u.settings.Mode = modePreview
-		p := filepath.Join(dir, "Scanned Lectures (preview).pdf")
-		copyFile(t, sample, p)
-		fyne.DoAndWait(func() { u.addPaths([]string{p}) })
+		var ps []string // two files, so the preview can step between them
+		for _, n := range []string{"Scanned Lectures (preview).pdf", "Scanned Notes (preview).pdf"} {
+			p := filepath.Join(dir, n)
+			copyFile(t, sample, p)
+			ps = append(ps, p)
+		}
+		fyne.DoAndWait(func() { u.addPaths(ps) })
 		var pw fyne.Window
 		waitFor(t, 120*time.Second, func() bool {
 			for _, w := range a.Driver().AllWindows() {
@@ -194,6 +211,7 @@ func TestScreenshots(t *testing.T) {
 			}
 			return pw != nil
 		})
+		waitFor(t, 120*time.Second, func() bool { return u.pv != nil && len(u.pv.docs) == 2 })
 		time.Sleep(6 * time.Second) // page render and results
 		fyne.DoAndWait(func() { pw.Resize(fyne.NewSize(1100, 760)) })
 		time.Sleep(time.Second)
@@ -222,4 +240,45 @@ func TestPreviewEditsTurnedPage(t *testing.T) {
 			t.Fatalf("box %d lost the turn: %+v", i, r)
 		}
 	}
+}
+
+// In Preview only, two files share one preview window: it starts on the first,
+// steps to the second, saves it (Save is there in every mode), and then goes
+// back to the file still waiting. Closing it marks that one as previewed.
+func TestPreviewWindowStepsAndSaves(t *testing.T) {
+	a := test.NewTempApp(t)
+	u := newUI(a)
+	u.settings.Mode = modePreviewOnly
+	u.settings.OCR = false
+	dir := t.TempDir()
+	var ps []string
+	for _, n := range []string{"one.pdf", "two.pdf"} {
+		p := filepath.Join(dir, n)
+		copyFile(t, "../testdata/pdfs/example.pdf", p)
+		ps = append(ps, p)
+	}
+	fyne.DoAndWait(func() { u.addPaths(ps) })
+	waitFor(t, 60*time.Second, func() bool { return u.pv != nil && len(u.pv.docs) == 2 })
+	fyne.DoAndWait(func() {
+		if u.pv.cur.j != u.jobs[0] {
+			t.Error("the first file should be on screen")
+		}
+		u.pv.stepDoc(1)
+		if u.pv.cur.j != u.jobs[1] {
+			t.Error("the second file should be on screen")
+		}
+		if u.pv.save.Text != "Save" || u.pv.save.Disabled {
+			t.Errorf("Save should be offered in Preview only, got %q", u.pv.save.Text)
+		}
+		u.pv.saveCurrent()
+	})
+	waitFor(t, 60*time.Second, func() bool { return u.jobs[1].state == stateDone && u.pv != nil && u.pv.cur.j == u.jobs[0] })
+	if _, err := os.Stat(filepath.Join(dir, "two_cropped.pdf")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "one_cropped.pdf")); err == nil {
+		t.Fatal("the unsaved file was written")
+	}
+	fyne.DoAndWait(func() { u.pv.w.Close() })
+	waitFor(t, 10*time.Second, func() bool { return u.pv == nil && u.jobs[0].state == stateSkipped })
 }

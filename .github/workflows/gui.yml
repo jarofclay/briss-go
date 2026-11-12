@@ -69,16 +69,13 @@ jobs:
       - name: Check the PDF engine under the hardened runtime (macOS)
         if: runner.os == 'macOS'
         run: |
-          # A notarized app runs under the hardened runtime, which blocks the code the
-          # PDF engine compiles unless scripts/macos/entitlements.plist is signed in.
-          # An ad-hoc signature with the same options shows whether that holds.
+          # A notarized app runs under the hardened runtime, and the PDF engine compiles
+          # code while it runs; scripts/macos/entitlements.plist allows that. Sign the
+          # command line ad hoc with the same options and run it. (GitHub's Macs ran it
+          # even without the entitlement, so they may enforce less than a user's Mac.)
           go build -o "$RUNNER_TEMP/briss" ./cmd/briss
           codesign --force --options runtime --entitlements scripts/macos/entitlements.plist --sign - "$RUNNER_TEMP/briss"
           scripts/macos/check-engine.sh "$RUNNER_TEMP/briss" darwin "$(go env GOARCH)"
-          # TEMP (first run only): the same signature without the entitlement
-          cp "$RUNNER_TEMP/briss" "$RUNNER_TEMP/briss-noent"
-          codesign --force --options runtime --sign - "$RUNNER_TEMP/briss-noent"
-          if "$RUNNER_TEMP/briss-noent" detect testdata/pdfs/example.pdf >"$RUNNER_TEMP/noent.log" 2>&1; then echo "TEMP without the entitlement: works"; else echo "TEMP without the entitlement: fails"; tail -5 "$RUNNER_TEMP/noent.log"; fi
       - name: Set up Developer ID signing (macOS)
         if: runner.os == 'macOS' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
         env:
@@ -139,6 +136,7 @@ jobs:
           mkdir -p ../dist
           # the icon comes from rsrc_windows_amd64.syso (assets/logo/winres.py)
           go build -trimpath -ldflags "-H windowsgui -s -w" -o ../dist/Briss.exe .
+          python ../assets/logo/check_winres.py ../dist/Briss.exe
           cd ../dist && 7z a -tzip Briss-windows-amd64.zip Briss.exe ../LICENSE.txt
       - name: Attach to the release
         if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')

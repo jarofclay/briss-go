@@ -131,10 +131,12 @@ steps are then only needed for older downloads.
 - The signature includes one exception to the hardened runtime,
   `com.apple.security.cs.allow-unsigned-executable-memory`
   (`scripts/macos/entitlements.plist`): the PDF engine compiles PDFium from
-  WebAssembly to machine code while it runs, which the hardened runtime blocks
-  otherwise. Every GUI build checks this with an ad-hoc signature that has the same
-  options, and every signed release checks the signed program itself
-  (`scripts/macos/check-engine.sh`).
+  WebAssembly to machine code while it runs, the case Apple names this entitlement
+  for. Every GUI build runs the engine under an ad-hoc signature with the same
+  options, and every signed release runs the signed Apple-silicon program once
+  (`scripts/macos/check-engine.sh`). GitHub's Macs also ran it without the
+  entitlement, so they may enforce less than a user's Mac: the first signed download,
+  opened on a real Mac and used on a PDF, is the real test.
 - Signing runs only for tags and manual runs, never for pull requests, and GitHub never
   passes secrets to workflows started from forks. Anyone who can push to this
   repository can start a workflow that uses them, so keep write access to people you

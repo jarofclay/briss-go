@@ -41,7 +41,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 * Developer ID signing and notarization of the macOS app and command line, done by the
   GUI and release workflows once the project's Apple secrets are set
   ([docs/macos-signing.md](docs/macos-signing.md)); until then the builds stay as
-  before. The signature carries one hardened-runtime exception the PDF engine needs.
+  before. The signature carries one hardened-runtime exception, for the code the PDF
+  engine compiles while it runs.
   The release workflow now runs on a Mac and can be run by hand for a snapshot build.
 
 ## [2.0-beta] - 2026-11-10

@@ -2,8 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- Hardened-runtime exception for Briss. The PDF engine (PDFium as WebAssembly
      under wazero) compiles to machine code at run time: it maps memory, writes
-     the code and then makes it executable, without MAP_JIT. The hardened runtime,
-     which notarization requires, blocks that unless this entitlement is set. -->
+     the code and then makes it executable, without MAP_JIT. Apple names this
+     entitlement for exactly that under the hardened runtime, which notarization
+     requires. GitHub's Macs ran the engine even without it, but they may enforce
+     less than a user's Mac, so it stays; the notary service accepts it. -->
 <plist version="1.0">
 <dict>
 	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>

@@ -14,7 +14,7 @@
 set -euo pipefail
 
 if [ -z "${MACOS_SIGN_P12:-}" ]; then
-	echo "No Developer ID certificate in the secrets: the builds get an ad-hoc signature."
+	echo "No Developer ID certificate in the secrets: the app gets an ad-hoc signature, the command line none."
 	exit 0
 fi
 tmp=${RUNNER_TEMP:?}

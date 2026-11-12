@@ -40,6 +40,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+      - name: Check the Windows icon
+        run: python3 assets/logo/check_winres.py dist/briss_windows_*/briss.exe
       - name: Keep the snapshot downloads
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4

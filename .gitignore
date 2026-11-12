@@ -36,3 +36,9 @@ secrets/
 /check/
 *_preview/
 *_cropped.pdf
+
+# Apple signing files: they belong in GitHub Actions secrets only, never in the repository
+*.p12
+*.p8
+*.cer
+*.certSigningRequest

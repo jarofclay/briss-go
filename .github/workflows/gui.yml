@@ -1,7 +1,10 @@
 # Desktop app: test it, then build ready-to-run downloads for Linux, macOS
 # (Apple silicon and Intel) and Windows. On a v* tag the downloads are also
 # attached to the release goreleaser drafts for that tag (release.yml); a manual
-# run with "release_tag" set replaces them on that release. Fyne needs cgo and OpenGL headers,
+# run with "release_tag" set replaces them on that release. On a tag or a manual
+# run the macOS app is signed with the Developer ID and notarized when the
+# MACOS_* secrets are set (scripts/macos/signing-setup.sh lists them); otherwise
+# it gets an ad-hoc signature. Fyne needs cgo and OpenGL headers,
 # which the runners have (Linux gets them from apt), so people who only want
 # to use Briss do not have to install a C compiler. Find the files under
 # Actions > GUI > the latest run > Artifacts.
@@ -12,10 +15,10 @@ on:
   push:
     branches: [master, claude/gui]
     tags: ["v*"] # path filters are not applied to tag pushes
-    paths: ["gui/**", "internal/**", "go.mod", "go.sum", ".github/workflows/gui.yml"]
+    paths: ["gui/**", "internal/**", "assets/logo/**", "scripts/macos/**", "go.mod", "go.sum", ".github/workflows/gui.yml"]
   pull_request:
     branches: [master]
-    paths: ["gui/**", "internal/**", "go.mod", "go.sum", ".github/workflows/gui.yml"]
+    paths: ["gui/**", "internal/**", "assets/logo/**", "scripts/macos/**", "go.mod", "go.sum", ".github/workflows/gui.yml"]
   workflow_dispatch:
     inputs:
       release_tag:
@@ -61,37 +64,70 @@ jobs:
           mkdir -p ../dist/Briss
           go build -trimpath -ldflags "-s -w" -o ../dist/Briss/briss-gui .
           cp ../LICENSE.txt ../dist/Briss/
+          cp ../assets/logo/png/briss-256.png ../dist/Briss/briss.png
           tar -C ../dist -czf ../dist/${{ matrix.artifact }}.tar.gz Briss
+      - name: Check the PDF engine under the hardened runtime (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          # A notarized app runs under the hardened runtime, which blocks the code the
+          # PDF engine compiles unless scripts/macos/entitlements.plist is signed in.
+          # An ad-hoc signature with the same options shows whether that holds.
+          go build -o "$RUNNER_TEMP/briss" ./cmd/briss
+          codesign --force --options runtime --entitlements scripts/macos/entitlements.plist --sign - "$RUNNER_TEMP/briss"
+          scripts/macos/check-engine.sh "$RUNNER_TEMP/briss" darwin "$(go env GOARCH)"
+          # TEMP (first run only): the same signature without the entitlement
+          cp "$RUNNER_TEMP/briss" "$RUNNER_TEMP/briss-noent"
+          codesign --force --options runtime --sign - "$RUNNER_TEMP/briss-noent"
+          if "$RUNNER_TEMP/briss-noent" detect testdata/pdfs/example.pdf >"$RUNNER_TEMP/noent.log" 2>&1; then echo "TEMP without the entitlement: works"; else echo "TEMP without the entitlement: fails"; tail -5 "$RUNNER_TEMP/noent.log"; fi
+      - name: Set up Developer ID signing (macOS)
+        if: runner.os == 'macOS' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
+        env:
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+        run: scripts/macos/signing-setup.sh
       - name: Build (macOS app, Apple silicon and Intel)
         if: runner.os == 'macOS'
         working-directory: gui
+        env:
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
+          case $TAG in v[0-9]*) version=${TAG#v} ;; *) version=2.0.0 ;; esac
+          version=${version%%-*} # macOS wants plain numbers: 2.0.0-beta is 2.0.0
           for arch in arm64 amd64; do
             app=../dist/$arch/Briss.app
-            mkdir -p "$app/Contents/MacOS"
+            mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
             CGO_ENABLED=1 GOARCH=$arch go build -trimpath -ldflags "-s -w" -o "$app/Contents/MacOS/Briss" .
-            cat > "$app/Contents/Info.plist" <<'PLIST'
+            iconutil -c icns ../assets/logo/Briss.iconset -o "$app/Contents/Resources/Briss.icns"
+            cat > "$app/Contents/Info.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict>
             <key>CFBundleName</key><string>Briss</string>
+            <key>CFBundleDisplayName</key><string>Briss</string>
             <key>CFBundleExecutable</key><string>Briss</string>
+            <key>CFBundleIconFile</key><string>Briss</string>
             <key>CFBundleIdentifier</key><string>io.github.jarofclay.briss</string>
             <key>CFBundlePackageType</key><string>APPL</string>
-            <key>CFBundleShortVersionString</key><string>2.0.0</string>
+            <key>CFBundleShortVersionString</key><string>$version</string>
+            <key>CFBundleVersion</key><string>$version</string>
+            <key>LSMinimumSystemVersion</key><string>12.0</string>
             <key>NSHighResolutionCapable</key><true/>
             <key>CFBundleDocumentTypes</key><array><dict>
+              <key>CFBundleTypeName</key><string>PDF document</string>
               <key>CFBundleTypeExtensions</key><array><string>pdf</string></array>
+              <key>LSItemContentTypes</key><array><string>com.adobe.pdf</string></array>
               <key>CFBundleTypeRole</key><string>Viewer</string>
             </dict></array>
           </dict></plist>
           PLIST
-            # Seal the bundle with an ad-hoc signature. Without it the program keeps only
-            # the Go linker's placeholder signature (or none, for Intel) and macOS reports
-            # the downloaded app as damaged, with no way to open it anyway.
-            codesign --force --sign - "$app"
+            # Developer ID and notarization when signing-setup.sh found the secrets;
+            # otherwise an ad-hoc seal, without which macOS calls the download damaged.
+            ../scripts/macos/sign.sh "$app"
             codesign --verify --strict --verbose=2 "$app"
-            codesign --display --verbose=2 "$app" 2>&1 | grep -E '^(Identifier|Format|Signature|Sealed Resources)'
+            codesign --display --verbose=2 "$app" 2>&1 | grep -E '^(Identifier|Format|Signature|Sealed Resources|Runtime Version)' || true
             suffix=$([ $arch = arm64 ] && echo apple-silicon || echo intel)
             (cd ../dist/$arch && ditto -c -k --keepParent Briss.app ../Briss-macos-$suffix.zip)
           done
@@ -101,6 +137,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p ../dist
+          # the icon comes from rsrc_windows_amd64.syso (assets/logo/winres.py)
           go build -trimpath -ldflags "-H windowsgui -s -w" -o ../dist/Briss.exe .
           cd ../dist && 7z a -tzip Briss-windows-amd64.zip Briss.exe ../LICENSE.txt
       - name: Attach to the release

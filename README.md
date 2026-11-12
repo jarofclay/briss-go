@@ -1,3 +1,5 @@
+<img src="assets/logo/png/briss-256.png" width="112" alt="The Briss logo">
+
 # Briss 2.0 beta
 
 Briss crops PDF pages so the text shows larger on e-readers, tablets and phones. It finds
@@ -73,7 +75,8 @@ optional AI detectors (a local layout model and Claude). Asking for them
 
 ## The desktop app
 
-Drop PDFs (or folders of PDFs) on the window, or click it to choose one. Each file is
+Drop PDFs (or folders of PDFs) on the window, or click it to choose them with your
+system's own file picker (several at once; on a Mac, folders too). Each file is
 cropped straight away and saved next to the original as `NAME_cropped.pdf`; the arrow
 button on a finished file opens it.
 
@@ -505,11 +508,16 @@ go test ./...
 | `internal/crop` | The PDF writer (pdfcpu, pages cloned in place, straightening and text layers) |
 | `internal/ocr`, `internal/raster` | Tesseract driver; image turning and cutting |
 | `internal/cropdef`, `internal/bench` | Crop definition files; the benchmark |
+| `assets/logo/` | The logo: SVG source, rendered icons, the Windows icon resources ([assets/logo/README.md](assets/logo/README.md)) |
+| `scripts/macos/` | Signing and notarizing the macOS downloads ([docs/macos-signing.md](docs/macos-signing.md)) |
 | `spike/` | The week-1 experiments and Python helpers (`spike/tools`) |
 | `legacy-java/` | The Java Briss 2.0 |
 
 Release archives for Linux, macOS and Windows are built by goreleaser when a `v*` tag
-is pushed (`.github/workflows/release.yml`); CI runs the tests on all three systems and
+is pushed (`.github/workflows/release.yml`, on a Mac; a manual run builds a snapshot).
+The macOS app and programs are signed with the Developer ID and notarized once the
+project's Apple secrets are set, as [docs/macos-signing.md](docs/macos-signing.md)
+describes. CI runs the tests on all three systems and
 scans for secrets with gitleaks; `.github/workflows/gui.yml` tests and builds the
 desktop app. The app's tests run without a display (`cd gui && go test ./...`);
 `BRISS_GUI_SHOTS=dir go test -run TestScreenshots .` writes the screenshots above. Never commit API keys or private documents: this is a

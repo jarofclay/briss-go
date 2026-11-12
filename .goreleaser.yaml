@@ -20,6 +20,15 @@ builds:
     flags: [-trimpath]
     ldflags:
       - -s -w -X main.version={{.Version}}
+    hooks:
+      post:
+        # macOS programs: Developer ID signature and notarization when the
+        # release workflow set them up, then a check that the PDF engine still runs
+        # under the hardened runtime; other systems pass straight through.
+        - cmd: ./scripts/macos/sign.sh "{{ .Path }}" {{ .Os }}
+          output: true
+        - cmd: ./scripts/macos/check-engine.sh "{{ .Path }}" {{ .Os }} {{ .Arch }}
+          output: true
 
 archives:
   - id: briss

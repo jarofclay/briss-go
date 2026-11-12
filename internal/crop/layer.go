@@ -26,8 +26,28 @@ type Output struct {
 	// Turn shows the output page turned clockwise by 90, 180 or 270 degrees
 	// (added to the page's /Rotate) so a sideways or upside-down scan reads
 	// upright. Rect, Angle and Pivot stay measured on the page as stored.
-	Turn  int
+	Turn int
+	// Box, when set, is the output page itself, larger than Rect: the page
+	// gets this size and only Rect is drawn, the rest stays blank. Same-size
+	// output uses it where the source page has no more margin to give. It is
+	// in the same ratios as Rect and may reach past the page (below 0, above 1).
+	Box   *geom.Ratios
 	Words []Word // OCR words to lay over the page as invisible, selectable text
+}
+
+// boxOK reports whether Box, if set, holds Rect and has a size.
+func (o Output) boxOK() bool {
+	b, r := o.Box, o.Rect
+	if b == nil {
+		return true
+	}
+	for _, v := range []float64{b.L, b.R, b.T, b.B} {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return false
+		}
+	}
+	const eps = 1e-9
+	return b.L <= r.L+eps && b.R <= r.R+eps && b.T <= r.T+eps && b.B <= r.B+eps && b.L+b.R < 1 && b.T+b.B < 1
 }
 
 // PivotPoint returns the turning point in display ratios.
@@ -206,16 +226,21 @@ func effectiveResources(pctx *model.Context, d types.Dict) (types.Dict, error) {
 	return types.Dict{}, nil
 }
 
-// decorate turns and annotates one output page: its content becomes
-// "q [turn] q <original> Q [text layer] Q", so the original drawing cannot
-// leak state into what follows and the text layer turns with the scan.
+// decorate clips, turns and annotates one output page: its content becomes
+// "q [clip] [turn] q <original> Q [text layer] Q", so the original drawing
+// cannot leak state into what follows and the text layer turns with the scan.
+// The clip, to Rect, is there when the page (Box) is larger than what it shows.
 func decorate(pctx *model.Context, target types.Dict, ref geom.Rect, rot int, out Output, fontRef **types.IndirectRef) error {
 	turn := math.Abs(out.Angle) >= 0.01
 	layer := textLayer(out.Words, ref, (rot+out.Turn)%360)
-	if !turn && layer == nil {
+	if !turn && layer == nil && out.Box == nil {
 		return nil
 	}
 	pre := "q\n"
+	if out.Box != nil {
+		c := geom.ScaledBox(ref, nil, out.Rect, rot)
+		pre += fmt.Sprintf("%.4f %.4f %.4f %.4f re W n\n", c.LLX, c.LLY, c.Width(), c.Height())
+	}
 	if turn {
 		px, py := out.PivotPoint()
 		pv := geom.ScaledBox(ref, nil, geom.Ratios{L: px, R: 1 - px, T: py, B: 1 - py}, rot)

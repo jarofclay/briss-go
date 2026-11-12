@@ -71,7 +71,7 @@ func (f *analysisFlags) options(stdin io.Reader) (app.Options, error) {
 func extraFlags(c *cobra.Command, ex *app.Extras) {
 	fl := c.Flags()
 	fl.BoolVar(&ex.Straighten, "straighten", false, "turn leaning scanned pages level (scan detector only)")
-	fl.BoolVar(&ex.Normalize, "normalize", false, "give every output page the same size")
+	fl.BoolVar(&ex.Normalize, "normalize", false, "give every output page the size of the largest (landscape pages among themselves), padding where the page runs out")
 	fl.BoolVar(&ex.OCR, "ocr", false, "add an invisible text layer to scanned pages (needs Tesseract)")
 	fl.StringVar(&ex.OCRLang, "ocr-lang", "eng", `Tesseract languages, e.g. "eng+deu"`)
 }

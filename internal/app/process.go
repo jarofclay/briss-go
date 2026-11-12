@@ -82,13 +82,21 @@ func straightRect(r geom.Ratios, deg, pw, ph float64) (geom.Ratios, bool) {
 	return out, out.Valid()
 }
 
-// normalize gives the output pages of each kind (same source page size, and
-// left or right half of a landscape sheet) the size of the largest of them, so
-// an e-reader shows every page at the same scale. Each rectangle grows about
-// its centre horizontally, never into a neighbouring rectangle of the same
-// sheet; vertically it keeps its top when its top is where most pages' top
-// is (a short last page of a chapter), its bottom likewise (a chapter
-// opening), and grows about its centre otherwise. Rectangles stay on the page.
+// normalize gives every output page the size of the largest one, so an
+// e-reader shows every page at the same scale and a printout has one paper
+// size. Landscape pages (a fold-out map among book pages) are sized among
+// themselves, so they do not make every page as wide as they are; what counts
+// is the shape of the place the output comes from, so each half of a split
+// two-page spread is a portrait page. Each rectangle first grows over its own page: horizontally about its
+// centre, never past half way to a neighbouring rectangle of the same sheet
+// (the facing page of a split spread, the other column); vertically it keeps
+// its top when its top is where most pages of its kind have theirs (a short
+// last page of a chapter), its bottom likewise (a chapter opening), and grows
+// about its centre otherwise. Where the page has no more room, the output page
+// is made larger than what it shows (Output.Box) and the rest stays blank, so
+// the neighbour's content never shows. A kind is the source page size, the
+// left or right half of a landscape sheet, and the top or bottom of a page
+// split into rows; it only decides the alignment, not the size.
 func normalize(outs map[int][]crop.Output, pages []pdf.PageInfo) {
 	// Work on every page as it will be read: turned upright when its output
 	// carries a turn, so "top", "left page" and the sizes mean what a reader
@@ -109,9 +117,53 @@ func normalize(outs map[int][]crop.Output, pages []pdf.PageInfo) {
 		}
 	}
 	type ref struct{ page, idx int }
-	groups := map[[4]int][]ref{}
 	// over reports whether a and b share some of their extent along one axis
 	over := func(a0, a1, b0, b1 float64) bool { return a0 < b1 && b0 < a1 }
+	// room is the place an output may fill: its page, up to half way to the
+	// neighbours beside, above and below it
+	type span struct{ lo, hi, loY, hiY float64 }
+	rooms := map[ref]span{}
+	var size [2][2]float64 // the size every output page gets (width, height), portrait and landscape
+	landscape := map[ref]int{}
+	for p, vs := range views {
+		for i, v := range vs {
+			x0, x1 := v.r.L*v.pw, (1-v.r.R)*v.pw
+			y0, y1 := v.r.T*v.ph, (1-v.r.B)*v.ph
+			rm := span{0, v.pw, 0, v.ph}
+			for j, n := range vs {
+				if j == i {
+					continue
+				}
+				nx0, nx1 := n.r.L*v.pw, (1-n.r.R)*v.pw
+				ny0, ny1 := n.r.T*v.ph, (1-n.r.B)*v.ph
+				if over(y0, y1, ny0, ny1) { // beside
+					if nx1 <= x0 {
+						rm.lo = math.Max(rm.lo, (nx1+x0)/2)
+					}
+					if nx0 >= x1 {
+						rm.hi = math.Min(rm.hi, (x1+nx0)/2)
+					}
+				}
+				if over(x0, x1, nx0, nx1) { // above or below
+					if ny1 <= y0 {
+						rm.loY = math.Max(rm.loY, (ny1+y0)/2)
+					}
+					if ny0 >= y1 {
+						rm.hiY = math.Min(rm.hiY, (y1+ny0)/2)
+					}
+				}
+			}
+			k := ref{p, i}
+			rooms[k] = rm
+			if rm.hi-rm.lo > 1.05*(rm.hiY-rm.loY) {
+				landscape[k] = 1
+			}
+			sz := &size[landscape[k]]
+			sz[0] = math.Max(sz[0], x1-x0)
+			sz[1] = math.Max(sz[1], y1-y0)
+		}
+	}
+	groups := map[[4]int][]ref{}
 	for p, vs := range views {
 		for i, v := range vs {
 			side := 0 // a portrait page is one page; a landscape sheet has a left and a right one
@@ -129,46 +181,19 @@ func normalize(outs map[int][]crop.Output, pages []pdf.PageInfo) {
 		}
 	}
 	for _, g := range groups {
-		var tw, th float64
 		var tops, bots []float64
 		for _, r := range g {
 			v := views[r.page][r.idx]
-			tw = math.Max(tw, (1-v.r.L-v.r.R)*v.pw)
-			th = math.Max(th, (1-v.r.T-v.r.B)*v.ph)
 			tops, bots = append(tops, v.r.T), append(bots, v.r.B)
 		}
 		medT, medB := median(tops), median(bots)
 		for _, r := range g {
-			vs := views[r.page]
-			v := vs[r.idx]
+			v := views[r.page][r.idx]
 			x0, x1 := v.r.L*v.pw, (1-v.r.R)*v.pw
 			y0, y1 := v.r.T*v.ph, (1-v.r.B)*v.ph
-			// room: half way to the neighbours beside, above and below it
-			lo, hi, loY, hiY := 0.0, v.pw, 0.0, v.ph
-			for j, n := range vs {
-				if j == r.idx {
-					continue
-				}
-				nx0, nx1 := n.r.L*v.pw, (1-n.r.R)*v.pw
-				ny0, ny1 := n.r.T*v.ph, (1-n.r.B)*v.ph
-				if over(y0, y1, ny0, ny1) { // beside
-					if nx1 <= x0 {
-						lo = math.Max(lo, (nx1+x0)/2)
-					}
-					if nx0 >= x1 {
-						hi = math.Min(hi, (x1+nx0)/2)
-					}
-				}
-				if over(x0, x1, nx0, nx1) { // above or below
-					if ny1 <= y0 {
-						loY = math.Max(loY, (ny1+y0)/2)
-					}
-					if ny0 >= y1 {
-						hiY = math.Min(hiY, (y1+ny0)/2)
-					}
-				}
-			}
-			nx0, nx1 := fit((x0+x1)/2-tw/2, tw, lo, hi)
+			rm := rooms[r]
+			tw, th := size[landscape[r]][0], size[landscape[r]][1]
+			bx0, bx1, vx0, vx1 := place((x0+x1)/2-tw/2, tw, rm.lo, rm.hi)
 			var ny0 float64
 			switch {
 			case math.Abs(v.r.T-medT) <= 0.02:
@@ -178,24 +203,35 @@ func normalize(outs map[int][]crop.Output, pages []pdf.PageInfo) {
 			default:
 				ny0 = (y0+y1)/2 - th/2
 			}
-			ny0, ny1 := fit(ny0, th, loY, hiY)
-			nr := geom.Ratios{L: nx0 / v.pw, R: 1 - nx1/v.pw, T: ny0 / v.ph, B: 1 - ny1/v.ph}
-			if nr.Valid() {
-				o := &outs[r.page][r.idx]
-				o.Rect = nr.Turn(360 - o.Turn) // back on the page as stored
+			by0, by1, vy0, vy1 := place(ny0, th, rm.loY, rm.hiY)
+			// what shows never shrinks below the rectangle as detected or drawn
+			vx0, vx1 = math.Min(vx0, x0), math.Max(vx1, x1)
+			vy0, vy1 = math.Min(vy0, y0), math.Max(vy1, y1)
+			nr := geom.Ratios{L: vx0 / v.pw, R: 1 - vx1/v.pw, T: vy0 / v.ph, B: 1 - vy1/v.ph}
+			if !nr.Valid() {
+				continue
+			}
+			o := &outs[r.page][r.idx]
+			o.Rect = nr.Turn(360 - o.Turn) // back on the page as stored
+			if bx0 < vx0-1e-6 || bx1 > vx1+1e-6 || by0 < vy0-1e-6 || by1 > vy1+1e-6 {
+				box := geom.Ratios{L: bx0 / v.pw, R: 1 - bx1/v.pw, T: by0 / v.ph, B: 1 - by1/v.ph}.Turn(360 - o.Turn)
+				o.Box = &box
 			}
 		}
 	}
 }
 
-// fit places an interval of length n starting near a inside [lo, hi],
-// shrinking it only when it cannot fit.
-func fit(a, n, lo, hi float64) (float64, float64) {
-	if n >= hi-lo {
-		return lo, hi
+// place puts an interval of length n starting near a inside the room
+// [lo, hi]. It returns the interval (b0, b1) and the part of it that lies in
+// the room (v0, v1): all of it when it fits; otherwise the interval covers the
+// whole room, as close to a as it can, and reaches past it.
+func place(a, n, lo, hi float64) (b0, b1, v0, v1 float64) {
+	if n <= hi-lo {
+		a = math.Max(lo, math.Min(a, hi-n))
+		return a, a + n, a, a + n
 	}
-	a = math.Max(lo, math.Min(a, hi-n))
-	return a, a + n
+	a = math.Max(hi-n, math.Min(a, lo))
+	return a, a + n, lo, hi
 }
 
 func median(v []float64) float64 {

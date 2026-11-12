@@ -26,9 +26,17 @@ func TestStraightRectInvertsTheTilt(t *testing.T) {
 	}
 }
 
-// Two-page sheets and a short chapter-end page: after normalising every
-// left page has the same size, every right page too, no rectangle crosses
-// into its neighbour, and the short page keeps its top.
+// outSize is the size of the page an output becomes: its Box when it has one.
+func outSize(o crop.Output, pi pdf.PageInfo) (float64, float64) {
+	if o.Box != nil {
+		return size(*o.Box, pi)
+	}
+	return size(o.Rect, pi)
+}
+
+// Two-page sheets and a short chapter-end page: after normalising every page,
+// left or right, has the same size, no rectangle crosses into its neighbour,
+// and the short page keeps its top.
 func TestNormalize(t *testing.T) {
 	pages := []pdf.PageInfo{{Width: 1000, Height: 700}, {Width: 1000, Height: 700}}
 	outs := map[int][]crop.Output{
@@ -36,20 +44,62 @@ func TestNormalize(t *testing.T) {
 		2: {{Rect: geom.Ratios{L: 0.1, R: 0.56, T: 0.1, B: 0.5}}, {Rect: geom.Ratios{L: 0.55, R: 0.08, T: 0.11, B: 0.1}}},
 	}
 	normalize(outs, pages)
-	for i := 0; i < 2; i++ {
-		w1, h1 := size(outs[1][i].Rect, pages[0])
-		w2, h2 := size(outs[2][i].Rect, pages[1])
-		if math.Abs(w1-w2) > 1e-6 || math.Abs(h1-h2) > 1e-6 {
-			t.Fatalf("rectangle %d: %.1fx%.1f vs %.1fx%.1f", i, w1, h1, w2, h2)
-		}
-	}
+	w0, h0 := outSize(outs[1][0], pages[0])
 	for p, os := range outs {
+		for i, o := range os {
+			if w, h := outSize(o, pages[p-1]); math.Abs(w-w0) > 1e-6 || math.Abs(h-h0) > 1e-6 {
+				t.Fatalf("page %d rectangle %d: %.1fx%.1f, want %.1fx%.1f", p, i, w, h, w0, h0)
+			}
+		}
 		if 1-os[0].Rect.R > os[1].Rect.L+1e-9 {
 			t.Fatalf("page %d: left rectangle crosses into the right one: %+v", p, os)
 		}
 	}
+	if math.Abs(w0-380) > 1e-6 || math.Abs(h0-560) > 1e-6 {
+		t.Fatalf("size %.1fx%.1f, want the largest, 380x560", w0, h0)
+	}
 	if math.Abs(outs[2][0].Rect.T-0.1) > 1e-9 {
 		t.Fatalf("short page lost its top: %+v", outs[2][0].Rect)
+	}
+}
+
+// Where a page has no room to grow (a spread whose pages fill their halves,
+// next to a wider single page), the output page gets a Box of the common size
+// while what it shows stays on its own half. A landscape page (a fold-out map)
+// is sized on its own and does not widen the others.
+func TestNormalizePadsWhereThePageEnds(t *testing.T) {
+	pages := []pdf.PageInfo{{Width: 1000, Height: 700}, {Width: 700, Height: 700}, {Width: 1000, Height: 600}}
+	outs := map[int][]crop.Output{
+		1: {{Rect: geom.Ratios{L: 0.02, R: 0.52, T: 0.1, B: 0.1}}, {Rect: geom.Ratios{L: 0.52, R: 0.02, T: 0.1, B: 0.1}}},
+		2: {{Rect: geom.Ratios{L: 50.0 / 700, R: 50.0 / 700, T: 0.1, B: 0.1}}},
+		3: {{Rect: geom.Ratios{L: 0.05, R: 0.05, T: 0.05, B: 0.05}}},
+	}
+	normalize(outs, pages)
+	for p := 1; p <= 2; p++ {
+		for i, o := range outs[p] {
+			if w, h := outSize(o, pages[p-1]); math.Abs(w-600) > 1e-6 || math.Abs(h-560) > 1e-6 {
+				t.Fatalf("page %d rectangle %d: %.1fx%.1f, want 600x560", p, i, w, h)
+			}
+		}
+	}
+	if w, h := outSize(outs[3][0], pages[2]); math.Abs(w-900) > 1e-6 || math.Abs(h-540) > 1e-6 || outs[3][0].Box != nil {
+		t.Fatalf("the landscape page changed: %.1fx%.1f %+v", w, h, outs[3][0])
+	}
+	left, right := outs[1][0], outs[1][1]
+	if left.Box == nil || right.Box == nil {
+		t.Fatalf("the spread's pages need a larger page box: %+v", outs[1])
+	}
+	if 1-left.Rect.R > 0.5+1e-9 || right.Rect.L < 0.5-1e-9 {
+		t.Fatalf("what shows crosses the gutter: left %+v right %+v", left.Rect, right.Rect)
+	}
+	for _, o := range outs[1] {
+		b, r := *o.Box, o.Rect
+		if b.L > r.L || b.R > r.R || b.T > r.T || b.B > r.B {
+			t.Fatalf("box %+v does not hold %+v", b, r)
+		}
+	}
+	if outs[2][0].Box != nil {
+		t.Fatalf("the widest page needs no box: %+v", outs[2][0])
 	}
 }
 
@@ -68,7 +118,7 @@ func TestOutputAtFollowsTheTurn(t *testing.T) {
 }
 
 // Pages split into a top and a bottom part keep apart when normalised, and
-// top parts are sized with top parts.
+// every part gets the same height.
 func TestNormalizeRows(t *testing.T) {
 	pages := []pdf.PageInfo{{Width: 600, Height: 900}, {Width: 600, Height: 900}}
 	outs := map[int][]crop.Output{
@@ -81,8 +131,12 @@ func TestNormalizeRows(t *testing.T) {
 			t.Fatalf("page %d: top part runs into the bottom part: %+v", p, os)
 		}
 	}
-	h := func(r geom.Ratios) float64 { return 1 - r.T - r.B }
-	if math.Abs(h(outs[1][0].Rect)-h(outs[2][0].Rect)) > 1e-9 {
-		t.Fatalf("top parts differ in height: %+v %+v", outs[1][0].Rect, outs[2][0].Rect)
+	_, h0 := outSize(outs[1][0], pages[0])
+	for p, os := range outs {
+		for i, o := range os {
+			if _, h := outSize(o, pages[p-1]); math.Abs(h-h0) > 1e-6 {
+				t.Fatalf("page %d part %d is %.1f high, want %.1f", p, i, h, h0)
+			}
+		}
 	}
 }

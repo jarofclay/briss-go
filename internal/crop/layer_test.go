@@ -120,3 +120,43 @@ func TestEncodeText(t *testing.T) {
 		t.Fatalf("got %s", got)
 	}
 }
+
+// A page box larger than the rectangle (same-size output): the page gets the
+// box's size, what lies outside the rectangle is not drawn, even where the
+// source page has ink, and the rectangle's content is where it was.
+func TestPageBoxPadsAndClips(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "spread.pdf")
+	// a 400x300 sheet, black all over: whatever is left blank was clipped
+	doc := testpdf.Doc{Pages: []testpdf.Page{{Media: testpdf.Box{URX: 400, URY: 300}, Fill: []testpdf.Box{{URX: 400, URY: 300}}}}}
+	if err := os.WriteFile(src, testpdf.Build(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(dir, "out.pdf")
+	// show the left 200 points, on a page 300 wide that reaches 50 past each side
+	rect := geom.Ratios{L: 0, R: 0.5, T: 0, B: 0}
+	box := geom.Ratios{L: -0.125, R: 0.375, T: 0, B: 0}
+	if _, err := WriteOutputs(context.Background(), src, dst, map[int][]Output{1: {{Rect: rect, Box: &box}}}, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	e := testEngine(t)
+	od, err := e.Open(context.Background(), dst, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := od.Pages[0]; p.Width < 299.5 || p.Width > 300.5 || p.Height < 299.5 || p.Height > 300.5 {
+		t.Fatalf("page is %.1fx%.1f, want 300x300", p.Width, p.Height)
+	}
+	g := render(t, e, dst, 0, 300) // one pixel a point
+	at := func(x int) uint8 { return g.Pix[150*g.Stride+x] }
+	if at(25) < 250 || at(275) < 250 {
+		t.Fatalf("the padding must be blank: left %d, right %d", at(25), at(275))
+	}
+	if at(60) > 5 || at(240) > 5 {
+		t.Fatalf("the rectangle must show the page: %d, %d", at(60), at(240))
+	}
+	bad := map[int][]Output{1: {{Rect: rect, Box: &geom.Ratios{L: 0.1, R: 0.3}}}}
+	if _, err := WriteOutputs(context.Background(), src, filepath.Join(dir, "bad.pdf"), bad, Options{}); err == nil {
+		t.Fatal("a box that does not hold the rectangle must be refused")
+	}
+}

@@ -1,3 +1,5 @@
+<img src="assets/logo/png/briss-256.png" width="112" alt="The Briss logo">
+
 # Briss 2.0 beta
 
 Briss crops PDF pages so the text shows larger on e-readers, tablets and phones. It finds
@@ -73,7 +75,8 @@ optional AI detectors (a local layout model and Claude). Asking for them
 
 ## The desktop app
 
-Drop PDFs (or folders of PDFs) on the window, or click it to choose one. Each file is
+Drop PDFs (or folders of PDFs) on the window, or click it to choose them with your
+system's own file picker (several at once; on a Mac, folders too). Each file is
 cropped straight away and saved next to the original as `NAME_cropped.pdf`; the arrow
 button on a finished file opens it.
 
@@ -120,11 +123,39 @@ with 2.0 beta, has the app for Linux (`Briss-linux-amd64.tar.gz`), macOS
 Builds of every change to `master` are under **Actions**, then **GUI**, the newest run,
 **Artifacts** (you need to be signed in).
 
-- **macOS**: unzip and drag **Briss.app** to Applications. The app is not signed yet, so
-  the first time right-click it and choose **Open**, then **Open** again.
+- **macOS**: unzip and drag **Briss.app** to Applications. The app is not signed with an
+  Apple Developer ID yet, so macOS blocks it the first time (see
+  [First start on a Mac](#first-start-on-a-mac)).
 - **Windows**: run **Briss.exe**. SmartScreen may warn about an unknown publisher; choose
   **More info**, **Run anyway**.
 - **Linux**: unpack and run `Briss/briss-gui`.
+
+#### First start on a Mac
+
+Briss is not signed with an Apple Developer ID or notarized by Apple yet, so macOS
+blocks the app and the command line the first time and asks you to allow them once:
+
+1. Open Briss (double-click **Briss.app**, or run `./briss version` in Terminal). macOS
+   says it could not verify Briss; click **Done**.
+2. Open **System Settings**, then **Privacy & Security**, and scroll down to **Security**.
+   Next to "Briss was blocked to protect your Mac" (or "briss" for the command line)
+   click **Open Anyway** and enter your password.
+3. Open Briss again and click **Open Anyway**. From then on it opens normally.
+
+On macOS 14 and older, right-clicking **Briss.app** and choosing **Open** (twice) does the
+same. If macOS says Briss "is damaged and can't be opened", nothing is broken: the first
+2.0.0-beta macOS downloads were missing their (ad-hoc) bundle signature. Download the
+app again, or clear the download flag once in Terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Briss.app
+```
+
+For the command line, run this in the folder you unpacked it to:
+
+```bash
+xattr -d com.apple.quarantine briss
+```
 
 **For OCR**, install Tesseract once: `brew install tesseract` on macOS, the installer
 from [UB Mannheim](https://github.com/UB-Mannheim/tesseract/wiki) on Windows (keep the
@@ -154,8 +185,14 @@ and double-click `Briss.exe`). The first build takes a few minutes.
 
 ## Download and build
 
-There are no ready-made downloads yet, so you build briss from the source code. It
-takes a few minutes the first time and needs two free tools, Git and Go.
+**Ready-made downloads** of the command line are on the repository's **Releases** page:
+`briss_<version>_<system>_<cpu>`, where `darwin` is macOS, `arm64` is Apple silicon or
+another ARM processor, and `amd64` is Intel or AMD. Unpack it and put `briss` (`briss.exe`
+on Windows) in a folder on your `PATH`. On a Mac, allow it once as described in
+[First start on a Mac](#first-start-on-a-mac).
+
+To build briss from the source code instead, follow the steps below. It takes a few
+minutes the first time and needs two free tools, Git and Go.
 
 ### 1. Install Git and Go
 
@@ -471,11 +508,16 @@ go test ./...
 | `internal/crop` | The PDF writer (pdfcpu, pages cloned in place, straightening and text layers) |
 | `internal/ocr`, `internal/raster` | Tesseract driver; image turning and cutting |
 | `internal/cropdef`, `internal/bench` | Crop definition files; the benchmark |
+| `assets/logo/` | The logo: SVG source, rendered icons, the Windows icon resources ([assets/logo/README.md](assets/logo/README.md)) |
+| `scripts/macos/` | Signing and notarizing the macOS downloads ([docs/macos-signing.md](docs/macos-signing.md)) |
 | `spike/` | The week-1 experiments and Python helpers (`spike/tools`) |
 | `legacy-java/` | The Java Briss 2.0 |
 
 Release archives for Linux, macOS and Windows are built by goreleaser when a `v*` tag
-is pushed (`.github/workflows/release.yml`); CI runs the tests on all three systems and
+is pushed (`.github/workflows/release.yml`, on a Mac; a manual run builds a snapshot).
+The macOS app and programs are signed with the Developer ID and notarized once the
+project's Apple secrets are set, as [docs/macos-signing.md](docs/macos-signing.md)
+describes. CI runs the tests on all three systems and
 scans for secrets with gitleaks; `.github/workflows/gui.yml` tests and builds the
 desktop app. The app's tests run without a display (`cd gui && go test ./...`);
 `BRISS_GUI_SHOTS=dir go test -run TestScreenshots .` writes the screenshots above. Never commit API keys or private documents: this is a

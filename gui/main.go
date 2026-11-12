@@ -17,7 +17,6 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
-	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/jarofclay/briss-go/internal/app"
@@ -44,6 +43,7 @@ type ui struct {
 	pwDialog *dialog.FormDialog // the password prompt on screen, if any
 	pwJob    *Job               // the file it asks for
 	pwQueue  []*Job             // files waiting for their prompt
+	picking  bool               // a file picker is open
 }
 
 func main() {
@@ -85,7 +85,10 @@ func (u *ui) build() fyne.CanvasObject {
 	dot.Resize(fyne.NewSize(6, 6))
 	dot.Move(fyne.NewPos(2, 15))
 	dotBox.Resize(fyne.NewSize(10, 24))
-	brand := container.NewHBox(mark, container.NewGridWrap(fyne.NewSize(10, 24), dotBox))
+	logo := canvas.NewImageFromResource(appIcon())
+	logo.FillMode = canvas.ImageFillContain
+	logo.SetMinSize(fyne.NewSize(26, 26))
+	brand := container.NewHBox(logo, mark, container.NewGridWrap(fyne.NewSize(10, 24), dotBox))
 	u.optsBtn = NewIconButton("sliders", 18, u.toggleOptions)
 	u.clearBtn = NewIconButton("clear", 18, u.clearFinished)
 	u.clearBtn.Hide()
@@ -186,19 +189,6 @@ func mustURL(s string) *url.URL {
 		panic(err)
 	}
 	return u
-}
-
-func (u *ui) chooseFiles() {
-	d := dialog.NewFileOpen(func(r fyne.URIReadCloser, err error) {
-		if err != nil || r == nil {
-			return
-		}
-		r.Close()
-		u.addPaths([]string{r.URI().Path()})
-	}, u.w)
-	d.SetFilter(storage.NewExtensionFileFilter([]string{".pdf", ".PDF"}))
-	d.Resize(u.w.Canvas().Size())
-	d.Show()
 }
 
 // pdfsIn expands folders and keeps PDFs that are not briss outputs.

@@ -24,6 +24,27 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+* The macOS app downloads are sealed with an ad-hoc signature, so macOS no longer says
+  Briss "is damaged and can't be opened"; the first start still has to be allowed once
+  with **Open Anyway** (README, "First start on a Mac"), because the app is not notarized.
+* The GUI workflow can be run by hand with `release_tag` to rebuild the app downloads and
+  replace them on an existing release.
+* A logo: a page with its kept part framed by crop corners, on the app's dark tile. It is
+  the icon of the macOS app (`Briss.icns`), of `Briss.exe` and `briss.exe` (Windows icon
+  resources linked in by `go build`), of the app window, and ships as `briss.png` in the
+  Linux download; the app header shows it next to the name. Sources in `assets/logo/`.
+* Clicking the drop zone opens the system's own file picker instead of Fyne's dialog,
+  which crashed on macOS: the Open panel on macOS (files and folders), the Explorer
+  dialog on Windows, and the desktop's file chooser through the XDG portal on Linux,
+  each with several files at once. Fyne's dialog remains as the fallback on Linux
+  desktops without the portal.
+* Developer ID signing and notarization of the macOS app and command line, done by the
+  GUI and release workflows once the project's Apple secrets are set
+  ([docs/macos-signing.md](docs/macos-signing.md)); until then the builds stay as
+  before. The signature carries one hardened-runtime exception, for the code the PDF
+  engine compiles while it runs.
+  The release workflow now runs on a Mac and can be run by hand for a snapshot build.
+
 ## [2.0-beta] - 2026-11-10
 Briss rewritten in Go: a dark drop-and-go desktop app and a command line, with automatic
 crop detection for scanned books (two-page spreads, binding shadows, page edges),

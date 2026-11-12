@@ -1,18 +1,23 @@
 # Builds release archives with goreleaser when a v* tag is pushed. The release
-# is created as a draft so it can be checked before publishing.
+# is created as a draft so it can be checked before publishing. It runs on a Mac
+# so that the macOS programs can be signed with the Developer ID and notarized
+# with Apple's own tools when the MACOS_* secrets are set (see
+# scripts/macos/signing-setup.sh); goreleaser calls scripts/macos/sign.sh for
+# each build. Without the secrets the programs are built as before.
 
 name: Release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch: # a snapshot build, nothing released: to check the setup (signing included)
 
 permissions:
   contents: write
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,10 +25,29 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Set up Developer ID signing
+        env:
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+        run: scripts/macos/signing-setup.sh
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean
+          args: ${{ github.event_name == 'workflow_dispatch' && 'release --snapshot --clean' || 'release --clean' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+      - name: Check the Windows icon
+        run: python3 assets/logo/check_winres.py dist/briss_windows_*/briss.exe
+      - name: Keep the snapshot downloads
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: briss-snapshot
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt

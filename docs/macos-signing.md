@@ -174,8 +174,9 @@ your own Mac as above.
   (`scripts/macos/check-engine.sh`). GitHub's Macs also ran it without the
   entitlement, so they may enforce less than a user's Mac: the first signed download,
   opened on a real Mac and used on a PDF, is the real test.
-- If the log says `MACOS_SIGN_P12 holds no valid Developer ID Application certificate`,
-  it lists what the `.p12` holds, with your name left out. Nothing under "Signing
+- If a run warns `MACOS_SIGN_P12 holds no valid Developer ID Application certificate`,
+  the macOS builds went on with the ad-hoc signature, and the log of the step "Set up
+  Developer ID signing" lists what the `.p12` holds, with your name left out. Nothing under "Signing
   identities" means the private key is missing: export again from **My Certificates**,
   where the key shows under the certificate (step 2). Another kind, such as "Apple
   Development" or "Developer ID Installer", means the wrong certificate type (step 1).

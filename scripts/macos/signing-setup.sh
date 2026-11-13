@@ -9,8 +9,9 @@
 #
 # The certificate goes into a throwaway keychain and the key into a file in
 # $RUNNER_TEMP; MACOS_SIGN_IDENTITY and MACOS_NOTARY_KEY_PATH are written to
-# $GITHUB_ENV for scripts/macos/sign.sh. Without MACOS_SIGN_P12 this does
-# nothing and the builds keep an ad-hoc signature.
+# $GITHUB_ENV for scripts/macos/sign.sh. Without MACOS_SIGN_P12, or when it
+# holds no usable Developer ID Application certificate (a warning says what it
+# holds), the builds keep an ad-hoc signature.
 set -euo pipefail
 
 if [ -z "${MACOS_SIGN_P12:-}" ]; then
@@ -48,8 +49,11 @@ if [ -z "$identity" ]; then
 	security find-certificate -a "$keychain" | awk -F'"' '/"labl"/ {print "  " $4}' | sed -E 's/: .*/: .../'
 	echo "Signing identities (a certificate with its private key):"
 	security find-identity -p codesigning "$keychain" | sed -E 's/"([^":]*): [^"]*"/"\1: ..."/; s/^/  /'
-	echo "::error::MACOS_SIGN_P12 holds no valid Developer ID Application certificate with its private key. No identity listed: the .p12 lacks the private key (export it in Keychain Access from My Certificates, where the key shows under the certificate). Another kind listed (Apple Development, Developer ID Installer): create a Developer ID Application certificate. CSSMERR_TP_NOT_TRUSTED: the issuer is missing (see docs/macos-signing.md)."
-	exit 1
+	# A release still gets every download, with the ad-hoc signature: the
+	# warning shows on the run's summary page.
+	echo "::warning::MACOS_SIGN_P12 holds no valid Developer ID Application certificate with its private key, so the macOS builds get an ad-hoc signature. No identity listed: the .p12 lacks the private key (export it in Keychain Access from My Certificates, where the key shows under the certificate). Another kind listed (Apple Development, Developer ID Installer): create a Developer ID Application certificate. CSSMERR_TP_NOT_TRUSTED: the issuer is missing (see docs/macos-signing.md)."
+	security delete-keychain "$keychain" 2>/dev/null || true
+	exit 0
 fi
 echo "MACOS_SIGN_IDENTITY=$identity" >>"$GITHUB_ENV"
 echo "Developer ID certificate ready."

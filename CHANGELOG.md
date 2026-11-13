@@ -72,8 +72,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   it now passes plain writers. Tesseract also runs without flashing a console window
   for every page.
 * The macOS signing setup installs Apple's Developer ID intermediate certificates and,
-  when the `.p12` holds no usable Developer ID Application identity, says what it holds
-  instead (names left out).
+  when the `.p12` holds no usable Developer ID Application identity, warns, says what it
+  holds (names left out) and lets the builds go on with the ad-hoc signature, so a
+  wrong certificate cannot stop a release.
 
 ## [2.0-beta] - 2026-11-10
 Briss rewritten in Go: a dark drop-and-go desktop app and a command line, with automatic

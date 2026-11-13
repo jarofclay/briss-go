@@ -174,6 +174,14 @@ your own Mac as above.
   (`scripts/macos/check-engine.sh`). GitHub's Macs also ran it without the
   entitlement, so they may enforce less than a user's Mac: the first signed download,
   opened on a real Mac and used on a PDF, is the real test.
+- If the log says `MACOS_SIGN_P12 holds no valid Developer ID Application certificate`,
+  it lists what the `.p12` holds, with your name left out. Nothing under "Signing
+  identities" means the private key is missing: export again from **My Certificates**,
+  where the key shows under the certificate (step 2). Another kind, such as "Apple
+  Development" or "Developer ID Installer", means the wrong certificate type (step 1).
+  `CSSMERR_TP_NOT_TRUSTED` means its issuer is missing; the script installs Apple's
+  Developer ID intermediates from apple.com, so that points to a certificate from
+  another issuer.
 - Signing runs only for tags and manual runs, never for pull requests, and GitHub never
   passes secrets to workflows started from forks. Anyone who can push to this
   repository can start a workflow that uses them, so keep write access to people you

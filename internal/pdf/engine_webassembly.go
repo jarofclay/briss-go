@@ -3,6 +3,7 @@
 package pdf
 
 import (
+	"io"
 	"os"
 
 	"github.com/klippa-app/go-pdfium"
@@ -28,6 +29,22 @@ func newPool(workers int, cacheDir string) (pdfium.Pool, string, error) {
 		}
 		// An unwritable cache directory only costs start-up time, so it is not an error.
 	}
-	pool, err := webassembly.Init(webassembly.Config{MinIdle: 1, MaxIdle: workers, MaxTotal: workers, RuntimeConfig: rc})
+	pool, err := webassembly.Init(webassembly.Config{MinIdle: 1, MaxIdle: workers, MaxTotal: workers, RuntimeConfig: rc,
+		Stdout: stdio{os.Stdout}, Stderr: stdio{os.Stderr}})
 	return pool, "webassembly", err
+}
+
+// stdio passes what PDFium prints on to w without handing wazero the
+// *os.File itself. wazero inspects a file it is given, and in a program
+// without usable standard handles (the Windows desktop app, built without a
+// console) that fails, and with it every PDF: "could not instantiate
+// webassembly module: GetFileType /dev/stdout: The handle is invalid".
+// The output is only diagnostics, so write errors are dropped.
+type stdio struct{ w io.Writer }
+
+func (s stdio) Write(p []byte) (int, error) {
+	if s.w != nil {
+		s.w.Write(p)
+	}
+	return len(p), nil
 }

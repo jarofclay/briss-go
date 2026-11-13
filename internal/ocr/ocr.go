@@ -69,7 +69,9 @@ func Find() (string, error) {
 
 // Languages lists the installed language packs.
 func Languages(ctx context.Context, bin string) ([]string, error) {
-	out, err := exec.CommandContext(ctx, bin, "--list-langs").CombinedOutput()
+	cmd := exec.CommandContext(ctx, bin, "--list-langs")
+	noWindow(cmd)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("ocr: %s --list-langs: %w", bin, err)
 	}
@@ -106,6 +108,7 @@ func Recognize(ctx context.Context, bin string, img image.Image, lang string) ([
 	f.Close()
 	cmd := exec.CommandContext(ctx, bin, in, "stdout", "-l", lang, "--psm", "3", "tsv")
 	cmd.Env = append(os.Environ(), "OMP_THREAD_LIMIT=1") // briss runs several pages at once
+	noWindow(cmd)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()

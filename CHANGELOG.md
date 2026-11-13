@@ -66,6 +66,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   `macos-latest` has none free.
 * The site's favicon is the logo, with a PNG fallback and an Apple touch icon.
 
+* Windows: the desktop app could not open any PDF ("could not instantiate webassembly
+  module: GetFileType /dev/stdout: The handle is invalid"). Built without a console, it
+  has no usable standard output, and the PDF engine handed wazero the invalid handles;
+  it now passes plain writers. Tesseract also runs without flashing a console window
+  for every page.
+* The macOS signing setup installs Apple's Developer ID intermediate certificates and,
+  when the `.p12` holds no usable Developer ID Application identity, says what it holds
+  instead (names left out).
+
 ## [2.0-beta] - 2026-11-10
 Briss rewritten in Go: a dark drop-and-go desktop app and a command line, with automatic
 crop detection for scanned books (two-page spreads, binding shadows, page edges),

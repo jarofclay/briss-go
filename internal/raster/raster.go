@@ -54,6 +54,28 @@ func Crop(src *image.Gray, r image.Rectangle) *image.Gray {
 	return dst
 }
 
+// Pad returns a w x h image of colour bg with src drawn at (x, y); what falls
+// outside is cut off.
+func Pad(src *image.Gray, w, h, x, y int, bg uint8) *image.Gray {
+	dst := image.NewGray(image.Rect(0, 0, max(w, 1), max(h, 1)))
+	for i := range dst.Pix {
+		dst.Pix[i] = bg
+	}
+	b := src.Bounds()
+	for sy := 0; sy < b.Dy(); sy++ {
+		dy := y + sy
+		if dy < 0 || dy >= dst.Rect.Dy() {
+			continue
+		}
+		for sx := 0; sx < b.Dx(); sx++ {
+			if dx := x + sx; dx >= 0 && dx < dst.Rect.Dx() {
+				dst.Pix[dy*dst.Stride+dx] = src.Pix[(b.Min.Y+sy)*src.Stride+b.Min.X+sx]
+			}
+		}
+	}
+	return dst
+}
+
 // RotateQuarter returns src turned clockwise by turn degrees (0, 90, 180 or
 // 270), exactly, pixel for pixel.
 func RotateQuarter(src *image.Gray, turn int) *image.Gray {

@@ -32,6 +32,14 @@ and the copy, align and equalise tools of PLAN.md section 7.1 are not in this de
 the preview edits page by page. OCR depends on a separately installed Tesseract, and
 its quality follows the scan (curled pages near the spine read poorly).
 
+**Amended 2026-11-12, at the owner's request.** The mode switch moved from the options
+panel to the middle of the header, since it is chosen per batch. The preview is one
+window for every file waiting for review, with the page and file navigation in a bar at
+the top, "Source" and "Output" headings, and Save in every mode (Preview only included);
+after a save it moves to the next file still waiting. Same page size now means one size
+for every output page, left and right pages alike (landscape pages among themselves),
+with blank space where a page has no more margin to show.
+
 **Reopen if** users need to fix many pages of one book at once (bring back a per-cluster
 view in the preview), or the unsigned downloads prove too awkward (sign and notarise the
 macOS app, sign the Windows executable).

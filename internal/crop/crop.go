@@ -133,6 +133,9 @@ func apply(ctx context.Context, pctx *model.Context, pages map[int][]Output) (St
 			if r := o.Rect; !r.Valid() {
 				return st, fmt.Errorf("crop: page %d rectangle %d is invalid: %+v", p, i, r)
 			}
+			if !o.boxOK() {
+				return st, fmt.Errorf("crop: page %d rectangle %d has a page box that does not hold it: %+v", p, i, *o.Box)
+			}
 		}
 	}
 	// Resolve every page before touching the tree so page numbers stay those of the source.
@@ -163,6 +166,9 @@ func apply(ctx context.Context, pctx *model.Context, pages map[int][]Output) (St
 		}
 		for k, o := range rects {
 			b := geom.ScaledBox(cur.media, cur.crop, o.Rect, cur.rot)
+			if o.Box != nil {
+				b = geom.ScaledBox(cur.media, cur.crop, *o.Box, cur.rot)
+			}
 			target := cur.dict
 			if k > 0 {
 				clone := types.Dict{}

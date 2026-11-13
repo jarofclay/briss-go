@@ -388,6 +388,7 @@ type IconButton struct {
 	hovered  bool
 	size     float32
 	Accent   bool // stroke in the accent colour
+	Disabled bool // greyed out, taps ignored
 }
 
 func NewIconButton(name string, size float32, tapped func()) *IconButton {
@@ -397,7 +398,7 @@ func NewIconButton(name string, size float32, tapped func()) *IconButton {
 }
 
 func (b *IconButton) Tapped(*fyne.PointEvent) {
-	if b.OnTapped != nil {
+	if !b.Disabled && b.OnTapped != nil {
 		b.OnTapped()
 	}
 }
@@ -439,7 +440,10 @@ func (r *iconBtnRenderer) Refresh() {
 	if r.b.Accent {
 		c = colAccent
 	}
-	if r.b.hovered {
+	if r.b.Disabled {
+		c = colFaint
+	}
+	if r.b.hovered && !r.b.Disabled {
 		r.bg.FillColor = withAlpha(colText, 0x12)
 		if !r.b.Accent {
 			c = colText

@@ -56,3 +56,24 @@ func TestResizeAverages(t *testing.T) {
 		t.Fatalf("got %v %v", r.Bounds(), r.Pix)
 	}
 }
+
+func TestPad(t *testing.T) {
+	src := image.NewGray(image.Rect(0, 0, 2, 2)) // black
+	g := Pad(src, 4, 3, 1, 1, 255)
+	if g.Bounds().Dx() != 4 || g.Bounds().Dy() != 3 {
+		t.Fatalf("size %v", g.Bounds())
+	}
+	want := []uint8{
+		255, 255, 255, 255,
+		255, 0, 0, 255,
+		255, 0, 0, 255,
+	}
+	for i, v := range want {
+		if g.Pix[i] != v {
+			t.Fatalf("pixel %d is %d, want %d (%v)", i, g.Pix[i], v, g.Pix)
+		}
+	}
+	if g := Pad(src, 2, 2, -1, 1, 9); g.Pix[0] != 9 || g.Pix[2] != 0 || g.Pix[3] != 9 {
+		t.Fatalf("cut off wrongly: %v", g.Pix)
+	}
+}

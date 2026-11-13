@@ -55,8 +55,10 @@ this page).
   encryption survive cropping and splitting.
 - **Straighten** (`--straighten`): scanned pages that lean are turned level, page by
   page, without re-encoding the scan.
-- **Same page size** (`--normalize`): every output page of a kind gets the same size,
-  so an e-reader shows them all at the same scale.
+- **Same page size** (`--normalize`): every output page gets the size of the largest,
+  so an e-reader shows them all at the same scale. Pages show more of their own margin
+  where there is some, and blank space where the page (or the facing page of a spread)
+  begins; landscape pages, like a fold-out map, are sized among themselves.
 - **Selectable text** (`--ocr`): scanned pages get an invisible text layer you can
   search, select and copy, read by [Tesseract](https://tesseract-ocr.github.io)
   (installed separately).
@@ -84,13 +86,15 @@ button on a finished file opens it.
 |---|---|
 | ![Drop zone](docs/img/gui-start.png) | ![Options panel](docs/img/gui-options.png) |
 
-The sliders button at the top right opens the options (remembered between runs):
+The switch in the middle of the header sets the **mode**: **Auto** crops and saves at
+once; **Preview** opens the preview window first and saves when you press Save;
+**Preview only** opens the preview and saves only the files you press Save on. The
+sliders button at the top right opens the options (all remembered between runs):
 
 | Option | Default | What it does |
 |---|---|---|
-| Mode | Auto | **Auto** crops and saves at once. **Preview** opens a preview window first and saves when you press Save. **Preview only** opens the preview and saves nothing. |
 | Margin | 6 pt | Extra room around the content of every page |
-| Same page size | on | Every output page of a kind (left pages, right pages, ...) gets the size of the largest |
+| Same page size | on | Every output page gets the size of the largest one, left and right pages alike; where a page has no more margin to show, the rest is left blank. Landscape pages are sized among themselves |
 | Selectable text (OCR) | on | Adds a searchable text layer to scanned pages. Needs Tesseract; without it the switch is greyed out with a link to the installer |
 | Straighten | on | Turns leaning scanned pages level |
 | Auto-rotate | on | Turns sideways or upside-down scans upright, before splitting two-page spreads |
@@ -106,13 +110,16 @@ password is only kept while the app is open.
 
 ![Preview window](docs/img/gui-preview.png)
 
-The preview shows each sheet with its crop boxes (what is kept is bright), upright even
-when the scan is stored sideways, and, on the right, the pages as they will come out,
-turned, straightened and cropped. Drag a box's edge
-or corner to resize it, drag inside to move it, drag on empty space to draw a new one,
+The preview shows each sheet under **Source** with its crop boxes (what is kept is
+bright), upright even when the scan is stored sideways, and under **Output** the pages
+as they will come out, turned, straightened, cropped and sized. Drag a box's edge or
+corner to resize it, drag inside to move it, drag on empty space to draw a new one,
 right-click a box to remove it; the circular arrow puts the page's boxes back as
-detected. Arrow keys, Page Up/Down or the buttons at the bottom turn the pages; Escape
-closes the window.
+detected. The bar at the top turns the pages (first, previous, next, last; or the arrow
+keys, Page Up/Down, Home and End) and, when several files wait for review, moves
+between them (the file buttons beside the name, or `[` and `]`); each file keeps its
+edits while the window is open. **Save** writes the file on screen and moves on to the
+next one waiting; Escape closes the window.
 
 ### Getting the app
 
@@ -129,6 +136,33 @@ Builds of every change to `master` are under **Actions**, then **GUI**, the newe
 - **Windows**: run **Briss.exe**. SmartScreen may warn about an unknown publisher; choose
   **More info**, **Run anyway**.
 - **Linux**: unpack and run `Briss/briss-gui`.
+
+**Build the app on a Mac** (when you want the newest code, or GitHub has no Mac free to
+build it). Install Xcode's command line tools and Go 1.26 or later
+([go.dev/dl](https://go.dev/dl/), or `brew install go`), then:
+
+```bash
+xcode-select --install
+```
+
+```bash
+git clone https://github.com/jarofclay/briss-go.git && cd briss-go
+```
+
+```bash
+scripts/macos/build-app.sh
+```
+
+```bash
+open dist/arm64/Briss.app
+```
+
+The script builds for this Mac (`scripts/macos/build-app.sh amd64` builds the Intel app)
+and puts `Briss.app` in `dist/arm64/` (or `dist/amd64/`) with a zip like the release
+download next to it. Built on your own Mac it opens without any warning. To sign it with
+your Developer ID and notarize it, see
+[docs/macos-signing.md](docs/macos-signing.md#on-your-own-mac). The command line is
+`go build -o briss ./cmd/briss`.
 
 #### First start on a Mac
 
@@ -325,7 +359,7 @@ each rectangle is numbered in output order (1 = left page of a two-page sheet).
 | `--no-auto-split` | Keep two-page sheets (and pages stacked one above the other) as one page |
 | `--straighten` | Turn leaning scanned pages level |
 | `--auto-rotate` | Turn sideways or upside-down scanned pages upright (on by default; `--auto-rotate=false` to keep them as stored) |
-| `--normalize` | Give every output page of a kind the same size |
+| `--normalize` | Give every output page the size of the largest (landscape pages among themselves) |
 | `--ocr`, `--ocr-lang eng+deu` | Add a selectable text layer to scanned pages (needs Tesseract) |
 | `--exclude "1-3;10"` | Pages kept out of the grouping and cropped on their own (covers, plates) |
 | `-o FILE` | Output PDF or folder (default `NAME_cropped.pdf`) |

@@ -34,7 +34,7 @@ jobs:
         include:
           - os: ubuntu-latest
             artifact: Briss-linux-amd64
-          - os: macos-latest
+          - os: ${{ vars.MACOS_RUNNER || 'macos-latest' }}
             artifact: Briss-macos
           - os: windows-latest
             artifact: Briss-windows-amd64
@@ -85,48 +85,14 @@ jobs:
         run: scripts/macos/signing-setup.sh
       - name: Build (macOS app, Apple silicon and Intel)
         if: runner.os == 'macOS'
-        working-directory: gui
         env:
           MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
           TAG: ${{ inputs.release_tag || github.ref_name }}
+        # the same script builds the app on a Mac by hand (README, "Build the app on a Mac")
         run: |
-          case $TAG in v[0-9]*) version=${TAG#v} ;; *) version=2.0.0 ;; esac
-          version=${version%%-*} # macOS wants plain numbers: 2.0.0-beta is 2.0.0
           for arch in arm64 amd64; do
-            app=../dist/$arch/Briss.app
-            mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-            CGO_ENABLED=1 GOARCH=$arch go build -trimpath -ldflags "-s -w" -o "$app/Contents/MacOS/Briss" .
-            iconutil -c icns ../assets/logo/Briss.iconset -o "$app/Contents/Resources/Briss.icns"
-            cat > "$app/Contents/Info.plist" <<PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict>
-            <key>CFBundleName</key><string>Briss</string>
-            <key>CFBundleDisplayName</key><string>Briss</string>
-            <key>CFBundleExecutable</key><string>Briss</string>
-            <key>CFBundleIconFile</key><string>Briss</string>
-            <key>CFBundleIdentifier</key><string>io.github.jarofclay.briss</string>
-            <key>CFBundlePackageType</key><string>APPL</string>
-            <key>CFBundleShortVersionString</key><string>$version</string>
-            <key>CFBundleVersion</key><string>$version</string>
-            <key>LSMinimumSystemVersion</key><string>12.0</string>
-            <key>NSHighResolutionCapable</key><true/>
-            <key>CFBundleDocumentTypes</key><array><dict>
-              <key>CFBundleTypeName</key><string>PDF document</string>
-              <key>CFBundleTypeExtensions</key><array><string>pdf</string></array>
-              <key>LSItemContentTypes</key><array><string>com.adobe.pdf</string></array>
-              <key>CFBundleTypeRole</key><string>Viewer</string>
-            </dict></array>
-          </dict></plist>
-          PLIST
-            # Developer ID and notarization when signing-setup.sh found the secrets;
-            # otherwise an ad-hoc seal, without which macOS calls the download damaged.
-            ../scripts/macos/sign.sh "$app"
-            codesign --verify --strict --verbose=2 "$app"
-            codesign --display --verbose=2 "$app" 2>&1 | grep -E '^(Identifier|Format|Signature|Sealed Resources|Runtime Version)' || true
-            suffix=$([ $arch = arm64 ] && echo apple-silicon || echo intel)
-            (cd ../dist/$arch && ditto -c -k --keepParent Briss.app ../Briss-macos-$suffix.zip)
+            scripts/macos/build-app.sh $arch "$TAG"
           done
       - name: Build (Windows)
         if: runner.os == 'Windows'

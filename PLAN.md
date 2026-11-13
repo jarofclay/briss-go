@@ -333,9 +333,11 @@ Crop definition JSON (v1) is the contract between CLI, GUI, and the dataset:
 
 **As built (Amended 2026-11-06, decision 0011).** At the owner's request the app is not a
 port of these screens: it opens on a drop zone and crops dropped PDFs straight away;
-an options panel holds the mode (Auto, Preview, Preview only), margin, same page size,
-OCR, straighten and keep headers (all on by default); the preview edits one sheet at a
-time and shows the resulting pages beside it. It lives in `gui/` (its own Go module,
+the header holds the mode (Auto, Preview, Preview only; moved there from the options
+panel on 2026-11-12) and an options panel holds margin, same page size, OCR, straighten
+and keep headers (all on by default); the preview edits one sheet at a time and shows
+the resulting pages beside it, steps through every file waiting for review, and saves in
+every mode. It lives in `gui/` (its own Go module,
 because of cgo) on branch `claude/gui`, and CI builds it for the three systems. The
 parity list below remains the reference for later additions (cluster-wide editing,
 copy and align tools, Load and Save crops).

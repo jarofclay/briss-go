@@ -331,8 +331,8 @@ func TestExitCodes(t *testing.T) {
 	}
 }
 
-// --normalize gives every output page of the same source size one size;
-// --straighten and --ocr leave a born-digital book alone.
+// --normalize gives every portrait output page one size (the landscape pages
+// share another); --straighten and --ocr leave a born-digital book alone.
 func TestCropNormalize(t *testing.T) {
 	src := copyPDF(t, "book300.pdf")
 	dst := filepath.Join(t.TempDir(), "out.pdf")
@@ -359,9 +359,15 @@ func TestCropNormalize(t *testing.T) {
 	for _, p := range doc.Pages {
 		sizes[[2]int{int(math.Round(p.Width)), int(math.Round(p.Height))}]++
 	}
-	// portrait odd, portrait even and the landscape spreads: at most a few sizes
-	if len(sizes) > 4 {
-		t.Fatalf("too many page sizes after --normalize: %v", sizes)
+	// one size for the portrait pages, one for the 4 landscape ones
+	portrait := 0
+	for sz := range sizes {
+		if sz[0] <= sz[1] {
+			portrait++
+		}
+	}
+	if portrait != 1 || len(sizes) != 2 {
+		t.Fatalf("page sizes after --normalize: %v", sizes)
 	}
 }
 

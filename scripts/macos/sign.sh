@@ -46,13 +46,19 @@ fi
 work=$(mktemp -d)
 zip=$work/$(basename "$path").zip
 ditto -c -k --keepParent "$path" "$zip"
-out=$(xcrun notarytool submit "$zip" "${notary[@]}" --wait --timeout 30m --output-format json)
+# A failed notarization leaves the build signed (Open Anyway still works) and
+# warns, rather than stopping a release over it.
+if ! out=$(xcrun notarytool submit "$zip" "${notary[@]}" --wait --timeout 30m --output-format json 2>&1); then
+	echo "$out"
+	echo "::warning::notarytool could not send $path to Apple (check MACOS_NOTARY_KEY, MACOS_NOTARY_KEY_ID and MACOS_NOTARY_ISSUER_ID); it is signed but not notarized"
+	exit 0
+fi
 echo "$out"
 if ! grep -Eq '"status" *: *"Accepted"' <<<"$out"; then
 	id=$(sed -nE 's/.*"id" *: *"([^"]+)".*/\1/p' <<<"$out")
 	[ -z "$id" ] || xcrun notarytool log "$id" "${notary[@]}" || true
-	echo "::error::Apple did not accept $path for notarization"
-	exit 1
+	echo "::warning::Apple did not accept $path for notarization (its log is above); it is signed but not notarized"
+	exit 0
 fi
 rm -rf "$work"
 case $path in

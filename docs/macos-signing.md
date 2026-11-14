@@ -116,8 +116,13 @@ as below; you do not need to revoke the old one.
 2. Click **+** (or **Generate API Key**), name it `Briss notarization`, give it the
    **Developer** access, and click **Generate**.
 3. Click **Download** next to the new key. Apple lets you download it **once**; you get
-   `AuthKey_XXXXXXXXXX.p8`. Note the **Key ID** in its row and the **Issuer ID** above
-   the table.
+   `AuthKey_XXXXXXXXXX.p8`, where the Xs are the **Key ID** shown in its row. Note that
+   and the **Issuer ID** above the table.
+
+The Key ID and the Issuer ID only name the key; notarizing needs the `.p8` file itself.
+If you made a key before and no longer have its file, Apple cannot send it again:
+**Revoke** that key on the same page, make a new one as above, and use the new Key ID.
+The Issuer ID stays the same.
 
 ## 4. Add the five secrets to GitHub
 
@@ -133,7 +138,11 @@ base64 -i DeveloperID.p12 | pbcopy
 base64 -i AuthKey_XXXXXXXXXX.p8 | pbcopy
 ```
 
-The password, the Key ID and the Issuer ID are pasted as they are. With the GitHub
+For `MACOS_NOTARY_KEY` you can also paste the `.p8` file's text as it is: open it in
+TextEdit and copy all of it, from the line with BEGIN PRIVATE KEY to the line with END
+PRIVATE KEY. The password, the Key ID and the Issuer ID are pasted as
+they are. If a run warns that the builds are "signed but not notarized", it names the
+secret that is missing or wrong. With the GitHub
 command line you can set the files straight from Terminal instead:
 
 ```bash

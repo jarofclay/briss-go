@@ -85,6 +85,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   `--uninstall` removes it), and a `README.txt`. The README explains the first start on
   Linux and how to put the command line on the `PATH`, since most file managers no
   longer start a program on a double-click.
+* macOS notarization: the signing setup names the notary secret that is missing (the
+  `.p8` key file was, while its Key ID and Issuer ID were set) and checks that
+  `MACOS_NOTARY_KEY` holds a key, pasted as text or in base64. A notarization that Apple
+  refuses, or that cannot be sent, now warns and leaves the build signed instead of
+  stopping the release.
 * The macOS signing guide tells the "Apple Development" certificate from the "Developer ID
   Application" one, shows how to check which ones a Mac has, and walks through a new
   certificate signing request step by step.

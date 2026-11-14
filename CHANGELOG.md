@@ -76,6 +76,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   holds (names left out) and lets the builds go on with the ad-hoc signature, so a
   wrong certificate cannot stop a release.
 
+* Linux: the download has an `install.sh` that puts Briss in the applications menu, with
+  its icon and under "Open With" for PDFs (into `~/.local`, no administrator rights;
+  `--uninstall` removes it), and a `README.txt`. The README explains the first start on
+  Linux and how to put the command line on the `PATH`, since most file managers no
+  longer start a program on a double-click.
+* The macOS signing guide tells the "Apple Development" certificate from the "Developer ID
+  Application" one, shows how to check which ones a Mac has, and walks through a new
+  certificate signing request step by step.
+
 ## [2.0-beta] - 2026-11-10
 Briss rewritten in Go: a dark drop-and-go desktop app and a command line, with automatic
 crop detection for scanned books (two-page spreads, binding shadows, page edges),

@@ -135,7 +135,47 @@ Builds of every change to `master` are under **Actions**, then **GUI**, the newe
   [First start on a Mac](#first-start-on-a-mac)).
 - **Windows**: run **Briss.exe**. SmartScreen may warn about an unknown publisher; choose
   **More info**, **Run anyway**.
-- **Linux**: unpack and run `Briss/briss-gui`.
+- **Linux**: most file managers no longer start a program on a double-click, so install
+  it once from a terminal; see [First start on Linux](#first-start-on-linux).
+
+#### First start on Linux
+
+The download is for Intel and AMD processors (x86-64). Open a terminal in the folder you
+downloaded it to and unpack it:
+
+```bash
+tar -xzf Briss-linux-amd64.tar.gz
+```
+
+```bash
+cd Briss
+```
+
+Install it for your user (no administrator rights needed):
+
+```bash
+./install.sh
+```
+
+Briss is then in your applications menu (search for "Briss"), with its icon, and under
+**Open With** for PDFs. The script copies the program to `~/.local/bin/briss-gui` and adds
+a menu entry in `~/.local/share/applications`; `./install.sh --uninstall` removes both.
+To try it without installing, run `./briss-gui` in the same folder.
+
+If the terminal answers:
+
+- **Permission denied**: the files lost their run permission while unpacking; run
+  `chmod +x briss-gui install.sh` and try again.
+- **cannot execute binary file** or **Exec format error**: the computer has an ARM
+  processor; build Briss from the source code instead ([Download and build](#download-and-build)).
+- **error while loading shared libraries**: `install.sh` names the missing ones and the
+  command that installs them; on Debian or Ubuntu that is
+
+  ```bash
+  sudo apt install libgl1 libx11-6 libwayland-client0 libxkbcommon0 libxcursor1 libxrandr2 libxinerama1 libxi6 libxxf86vm1
+  ```
+
+The same steps are in `README.txt` inside the download.
 
 **Build the app on a Mac** (when you want the newest code, or GitHub has no Mac free to
 build it). Install Xcode's command line tools and Go 1.26 or later
@@ -224,6 +264,25 @@ and double-click `Briss.exe`). The first build takes a few minutes.
 another ARM processor, and `amd64` is Intel or AMD. Unpack it and put `briss` (`briss.exe`
 on Windows) in a folder on your `PATH`. On a Mac, allow it once as described in
 [First start on a Mac](#first-start-on-a-mac).
+
+On Linux or macOS, in a terminal in the download folder (use the file name you
+downloaded):
+
+```bash
+tar -xzf briss_2.0.0-beta_linux_amd64.tar.gz
+```
+
+```bash
+mkdir -p ~/.local/bin && mv briss ~/.local/bin/
+```
+
+```bash
+~/.local/bin/briss version
+```
+
+Most Linux systems put `~/.local/bin` on your `PATH` once it exists, so after you log out
+and in again `briss version` works as well. The command line needs no libraries beyond
+the system's own.
 
 To build briss from the source code instead, follow the steps below. It takes a few
 minutes the first time and needs two free tools, Git and Go.

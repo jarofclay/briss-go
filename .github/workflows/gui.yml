@@ -15,10 +15,10 @@ on:
   push:
     branches: [master, claude/gui]
     tags: ["v*"] # path filters are not applied to tag pushes
-    paths: ["gui/**", "internal/**", "assets/logo/**", "scripts/macos/**", "go.mod", "go.sum", ".github/workflows/gui.yml"]
+    paths: ["gui/**", "internal/**", "assets/logo/**", "scripts/macos/**", "scripts/linux/**", "go.mod", "go.sum", ".github/workflows/gui.yml"]
   pull_request:
     branches: [master]
-    paths: ["gui/**", "internal/**", "assets/logo/**", "scripts/macos/**", "go.mod", "go.sum", ".github/workflows/gui.yml"]
+    paths: ["gui/**", "internal/**", "assets/logo/**", "scripts/macos/**", "scripts/linux/**", "go.mod", "go.sum", ".github/workflows/gui.yml"]
   workflow_dispatch:
     inputs:
       release_tag:
@@ -63,9 +63,11 @@ jobs:
         run: |
           mkdir -p ../dist/Briss
           go build -trimpath -ldflags "-s -w" -o ../dist/Briss/briss-gui .
-          cp ../LICENSE.txt ../dist/Briss/
+          cp ../LICENSE.txt ../scripts/linux/install.sh ../scripts/linux/README.txt ../dist/Briss/
           cp ../assets/logo/png/briss-256.png ../dist/Briss/briss.png
+          chmod 755 ../dist/Briss/briss-gui ../dist/Briss/install.sh
           tar -C ../dist -czf ../dist/${{ matrix.artifact }}.tar.gz Briss
+          tar -tvzf ../dist/${{ matrix.artifact }}.tar.gz
       - name: Check the PDF engine under the hardened runtime (macOS)
         if: runner.os == 'macOS'
         run: |

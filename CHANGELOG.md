@@ -100,6 +100,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   "Access is denied" and stopped the engine. It now starts without the cache, which only
   costs start-up time.
 
+* macOS notarization in CI: the Key ID and Issuer ID secrets are cleaned of spaces and
+  line breaks (and `AuthKey_…p8` is taken for its Key ID), and the signing setup asks
+  Apple once whether it accepts the key before any build is sent. If Apple refuses it
+  (the first tagged release got "401 Unauthenticated"), the warning says which value
+  looks wrong.
+
 ## [2.0-beta] - 2026-11-10
 Briss rewritten in Go: a dark drop-and-go desktop app and a command line, with automatic
 crop detection for scanned books (two-page spreads, binding shadows, page edges),

@@ -38,7 +38,12 @@ echo "Signed $path with the Developer ID."
 if [ -n "${MACOS_NOTARY_PROFILE:-}" ]; then
 	notary=(--keychain-profile "$MACOS_NOTARY_PROFILE")
 elif [ -n "${MACOS_NOTARY_KEY_PATH:-}" ]; then
-	notary=(--key "$MACOS_NOTARY_KEY_PATH" --key-id "${MACOS_NOTARY_KEY_ID:?}" --issuer "${MACOS_NOTARY_ISSUER_ID:?}")
+	# cleaned as in signing-setup.sh: no spaces or line breaks, no AuthKey_ or .p8
+	key_id=$(printf '%s' "${MACOS_NOTARY_KEY_ID:?}" | tr -d '[:space:]')
+	key_id=${key_id#AuthKey_}
+	key_id=${key_id%.p8}
+	issuer=$(printf '%s' "${MACOS_NOTARY_ISSUER_ID:?}" | tr -d '[:space:]')
+	notary=(--key "$MACOS_NOTARY_KEY_PATH" --key-id "$key_id" --issuer "$issuer")
 else
 	echo "sign.sh: no notary profile or key, $path is signed but not notarized"
 	exit 0

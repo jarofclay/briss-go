@@ -32,6 +32,26 @@ if [ ! -f "$here/briss-gui" ]; then
 	echo "install.sh: briss-gui is not next to this script; run it from the unpacked Briss folder." >&2
 	exit 1
 fi
+
+# The download must match the processor. Otherwise the program cannot start;
+# on an ARM computer with x86-64 emulation installed the error is
+# "qemu-x86_64-static: Could not open '/lib64/ld-linux-x86-64.so.2'".
+case $(uname -m) in
+x86_64 | amd64) cpu=amd64 ;;
+aarch64 | arm64) cpu=arm64 ;;
+*) cpu=$(uname -m) ;;
+esac
+case $(od -An -t u2 -j 18 -N 2 "$here/briss-gui" | tr -d ' ') in # the ELF machine field
+62) built=amd64 ;;
+183) built=arm64 ;;
+*) built=$cpu ;;
+esac
+if [ "$built" != "$cpu" ]; then
+	echo "install.sh: this is the $built download (Briss-linux-$built.tar.gz), but this computer has an $cpu processor." >&2
+	echo "Download Briss-linux-$cpu.tar.gz from the releases page instead:" >&2
+	echo "https://github.com/jarofclay/briss-go/releases" >&2
+	exit 1
+fi
 mkdir -p "$bin" "$apps" "$icons"
 cp "$here/briss-gui" "$bin/briss-gui"
 chmod 755 "$bin/briss-gui"

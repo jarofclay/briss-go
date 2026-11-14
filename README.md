@@ -124,7 +124,8 @@ next one waiting; Escape closes the window.
 ### Getting the app
 
 **Ready-made downloads.** Each release on the repository's **Releases** page, starting
-with 2.0 beta, has the app for Linux (`Briss-linux-amd64.tar.gz`), macOS
+with 2.0 beta, has the app for Linux (`Briss-linux-amd64.tar.gz` for Intel and AMD,
+`Briss-linux-arm64.tar.gz` for ARM), macOS
 (`Briss-macos-apple-silicon.zip`, `Briss-macos-intel.zip`) and Windows
 (`Briss-windows-amd64.zip`), next to the command line (`briss_..._<system>_<cpu>`).
 Builds of every change to `master` are under **Actions**, then **GUI**, the newest run,
@@ -140,11 +141,19 @@ Builds of every change to `master` are under **Actions**, then **GUI**, the newe
 
 #### First start on Linux
 
-The download is for Intel and AMD processors (x86-64). Open a terminal in the folder you
-downloaded it to and unpack it:
+There are two downloads: `Briss-linux-amd64.tar.gz` for Intel and AMD processors and
+`Briss-linux-arm64.tar.gz` for ARM (Raspberry Pi, ARM laptops, Linux in a virtual
+machine on an Apple-silicon Mac). This command tells which one the computer needs:
+`x86_64` means amd64, `aarch64` means arm64.
 
 ```bash
-tar -xzf Briss-linux-amd64.tar.gz
+uname -m
+```
+
+Open a terminal in the folder you downloaded it to and unpack it (here the arm64 one):
+
+```bash
+tar -xzf Briss-linux-arm64.tar.gz
 ```
 
 ```bash
@@ -166,8 +175,9 @@ If the terminal answers:
 
 - **Permission denied**: the files lost their run permission while unpacking; run
   `chmod +x briss-gui install.sh` and try again.
-- **cannot execute binary file** or **Exec format error**: the computer has an ARM
-  processor; build Briss from the source code instead ([Download and build](#download-and-build)).
+- **cannot execute binary file**, **Exec format error**, or **qemu-x86_64-static: Could
+  not open '/lib64/ld-linux-x86-64.so.2'**: the download is for the other kind of
+  processor; take the other one (see `uname -m` above). `install.sh` checks this too.
 - **error while loading shared libraries**: `install.sh` names the missing ones and the
   command that installs them; on Debian or Ubuntu that is
 

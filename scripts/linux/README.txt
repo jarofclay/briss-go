@@ -17,9 +17,12 @@ To try it without installing, run it from this folder:
 
 "Permission denied": the files lost their run permission while unpacking; run
     chmod +x briss-gui install.sh
-"cannot execute binary file" or "Exec format error": this download is for
-    Intel and AMD processors (x86-64); on ARM, build Briss from the source
-    code (see the README on GitHub).
+"cannot execute binary file", "Exec format error" or "qemu-x86_64-static:
+    Could not open '/lib64/ld-linux-x86-64.so.2'": the download does not
+    match the processor. Briss-linux-amd64 is for Intel and AMD (x86-64),
+    Briss-linux-arm64 for ARM (aarch64: Raspberry Pi, ARM laptops, Linux on
+    Apple silicon). "uname -m" tells which this computer has; install.sh
+    checks it too.
 A missing library such as libGL.so.1: install.sh names the ones missing and
     the command that installs them.
 

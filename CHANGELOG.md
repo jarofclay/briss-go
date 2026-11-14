@@ -76,6 +76,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   holds (names left out) and lets the builds go on with the ad-hoc signature, so a
   wrong certificate cannot stop a release.
 
+* Linux on ARM: a `Briss-linux-arm64.tar.gz` download, built on GitHub's ARM runners, next
+  to the Intel and AMD one; on an ARM computer the x86-64 download failed with
+  "qemu-x86_64-static: Could not open '/lib64/ld-linux-x86-64.so.2'". `install.sh` refuses
+  the download that does not match the processor and names the right one.
 * Linux: the download has an `install.sh` that puts Briss in the applications menu, with
   its icon and under "Open With" for PDFs (into `~/.local`, no administrator rights;
   `--uninstall` removes it), and a `README.txt`. The README explains the first start on

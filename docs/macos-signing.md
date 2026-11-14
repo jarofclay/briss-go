@@ -44,7 +44,10 @@ security find-identity -v -p codesigning
 
 Every line is a certificate with its private key on this Mac. A line with
 **Developer ID Application** means you have it: skip to step 2 and export that one (not
-the "Apple Development" one).
+the "Apple Development" one). Lines that start with **Apple Development** are not it,
+whatever name or team ID they show in brackets: a Mac often has several of them, one per
+team or Apple ID that Xcode has signed in with. The team ID in brackets only says which
+team a certificate belongs to; the words before the colon say what kind it is.
 
 If [developer.apple.com](https://developer.apple.com/account) lists a Developer ID
 Application certificate under **Certificates** but this Mac does not show it, its private

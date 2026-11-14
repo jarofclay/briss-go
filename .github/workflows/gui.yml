@@ -34,6 +34,8 @@ jobs:
         include:
           - os: ubuntu-latest
             artifact: Briss-linux-amd64
+          - os: ubuntu-24.04-arm # Linux on ARM: Raspberry Pi, ARM laptops, Linux VMs on Apple silicon
+            artifact: Briss-linux-arm64
           - os: ${{ vars.MACOS_RUNNER || 'macos-latest' }}
             artifact: Briss-macos
           - os: windows-latest

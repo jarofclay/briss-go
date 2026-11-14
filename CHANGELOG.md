@@ -104,7 +104,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   line breaks (and `AuthKey_…p8` is taken for its Key ID), and the signing setup asks
   Apple once whether it accepts the key before any build is sent. If Apple refuses it
   (the first tagged release got "401 Unauthenticated"), the warning says which value
-  looks wrong.
+  looks wrong. When Apple takes longer than the 30-minute wait (common for a team's first
+  submissions), the warning now says the build was uploaded and names the submission to
+  check, instead of blaming the secrets.
 
 ## [2.0-beta] - 2026-11-10
 Briss rewritten in Go: a dark drop-and-go desktop app and a command line, with automatic

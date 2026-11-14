@@ -266,6 +266,19 @@ func TestPreviewWindowStepsAndSaves(t *testing.T) {
 	waitFor(t, 60*time.Second, func() bool {
 		return u.pv != nil && len(u.pv.docs) == 2 && strings.Contains(u.pv.docText.Text, "file 1 of 2")
 	})
+	// let the page on screen finish rendering before the next step: under the
+	// test driver its callback runs on the render goroutine, beside the test
+	settled := func() {
+		t.Helper()
+		waitFor(t, 60*time.Second, func() bool {
+			s := u.pv.cur
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			return s.sheets[s.page] != nil && !s.busy[s.page]
+		})
+		time.Sleep(300 * time.Millisecond)
+	}
+	settled()
 	fyne.DoAndWait(func() {
 		if u.pv.cur.j != u.jobs[0] {
 			t.Error("the first file should be on screen")
@@ -274,6 +287,9 @@ func TestPreviewWindowStepsAndSaves(t *testing.T) {
 		if u.pv.cur.j != u.jobs[1] {
 			t.Error("the second file should be on screen")
 		}
+	})
+	settled()
+	fyne.DoAndWait(func() {
 		if u.pv.save.Text != "Save" || u.pv.save.Disabled {
 			t.Errorf("Save should be offered in Preview only, got %q", u.pv.save.Text)
 		}

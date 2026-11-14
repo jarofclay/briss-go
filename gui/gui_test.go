@@ -106,14 +106,17 @@ func TestPasswordPrompt(t *testing.T) {
 	copyFile(t, "../testdata/pdfs/example-protected.pdf", src)
 	fyne.DoAndWait(func() { u.addPaths([]string{src}) })
 	j := u.jobs[0]
-	waitFor(t, 60*time.Second, func() bool { return j.state == stateLocked })
+	// The test driver runs fyne.Do callbacks on the calling goroutine, so the
+	// runner can have marked the job locked while it is still building the
+	// prompt: wait for the prompt itself (the real app runs both in one turn).
+	waitFor(t, 60*time.Second, func() bool { return j.state == stateLocked && u.pwDialog != nil })
 	fyne.DoAndWait(func() {
 		if u.pwDialog == nil || u.pwJob != j || j.wrong || j.row.caption.Text != "Password needed" {
 			t.Errorf("expected a password prompt for the file: dialog %v, wrong %v, caption %q", u.pwDialog != nil, j.wrong, j.row.caption.Text)
 		}
 		u.unlock(j, "not it")
 	})
-	waitFor(t, 60*time.Second, func() bool { return j.state == stateLocked && j.wrong })
+	waitFor(t, 60*time.Second, func() bool { return j.state == stateLocked && j.wrong && u.pwDialog != nil })
 	fyne.DoAndWait(func() {
 		if u.pwDialog == nil || j.row.caption.Text != "Wrong password" {
 			t.Errorf("a wrong password must ask again")
@@ -258,7 +261,24 @@ func TestPreviewWindowStepsAndSaves(t *testing.T) {
 		ps = append(ps, p)
 	}
 	fyne.DoAndWait(func() { u.addPaths(ps) })
-	waitFor(t, 60*time.Second, func() bool { return u.pv != nil && len(u.pv.docs) == 2 })
+	// wait until the window has taken in the second file (see TestPasswordPrompt
+	// on why the state alone is not enough under the test driver)
+	waitFor(t, 60*time.Second, func() bool {
+		return u.pv != nil && len(u.pv.docs) == 2 && strings.Contains(u.pv.docText.Text, "file 1 of 2")
+	})
+	// let the page on screen finish rendering before the next step: under the
+	// test driver its callback runs on the render goroutine, beside the test
+	settled := func() {
+		t.Helper()
+		waitFor(t, 60*time.Second, func() bool {
+			s := u.pv.cur
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			return s.sheets[s.page] != nil && !s.busy[s.page]
+		})
+		time.Sleep(300 * time.Millisecond)
+	}
+	settled()
 	fyne.DoAndWait(func() {
 		if u.pv.cur.j != u.jobs[0] {
 			t.Error("the first file should be on screen")
@@ -267,6 +287,9 @@ func TestPreviewWindowStepsAndSaves(t *testing.T) {
 		if u.pv.cur.j != u.jobs[1] {
 			t.Error("the second file should be on screen")
 		}
+	})
+	settled()
+	fyne.DoAndWait(func() {
 		if u.pv.save.Text != "Save" || u.pv.save.Disabled {
 			t.Errorf("Save should be offered in Preview only, got %q", u.pv.save.Text)
 		}

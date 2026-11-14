@@ -47,22 +47,23 @@ func NewSheetView(changed func([]geom.Ratios)) *SheetView {
 	return v
 }
 
-// SetPage shows a new page image with its rectangles.
+// SetPage shows a new page image with its rectangles. The dimmed copy is
+// built aside and swapped in at the end, so the widget never holds half of it.
 func (v *SheetView) SetPage(img *image.Gray, rects []geom.Ratios) {
-	v.img = img
-	v.dim = nil
+	var dim *image.NRGBA
 	if img != nil {
 		b := img.Bounds()
-		v.dim = image.NewNRGBA(b)
+		dim = image.NewNRGBA(b)
 		for y := 0; y < b.Dy(); y++ {
 			for x := 0; x < b.Dx(); x++ {
 				g := img.Pix[y*img.Stride+x]
 				l := uint8(int(g) * 30 / 100)
-				i := y*v.dim.Stride + 4*x
-				v.dim.Pix[i], v.dim.Pix[i+1], v.dim.Pix[i+2], v.dim.Pix[i+3] = l, l, l+4, 0xff
+				i := y*dim.Stride + 4*x
+				dim.Pix[i], dim.Pix[i+1], dim.Pix[i+2], dim.Pix[i+3] = l, l, l+4, 0xff
 			}
 		}
 	}
+	v.img, v.dim = img, dim
 	v.rects = append([]geom.Ratios(nil), rects...)
 	v.sel = -1
 	v.Refresh()

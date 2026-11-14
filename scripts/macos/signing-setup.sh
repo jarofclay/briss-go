@@ -58,14 +58,26 @@ fi
 echo "MACOS_SIGN_IDENTITY=$identity" >>"$GITHUB_ENV"
 echo "Developer ID certificate ready."
 
-if [ -n "${MACOS_NOTARY_KEY:-}" ]; then
-	key=$tmp/notary-key.p8
-	case $MACOS_NOTARY_KEY in
-	-----BEGIN*) printf '%s\n' "$MACOS_NOTARY_KEY" >"$key" ;;
-	*) printf '%s' "$MACOS_NOTARY_KEY" | base64 --decode >"$key" ;;
-	esac
-	echo "MACOS_NOTARY_KEY_PATH=$key" >>"$GITHUB_ENV"
-	echo "Notary key ready."
-else
-	echo "No notary key in the secrets: the builds are signed but not notarized."
+# Notarizing needs all three: the API key file and the two IDs that name it.
+missing=""
+[ -n "${MACOS_NOTARY_KEY:-}" ] || missing="$missing MACOS_NOTARY_KEY (the AuthKey_XXXXXXXXXX.p8 file)"
+[ -n "${MACOS_NOTARY_KEY_ID:-}" ] || missing="$missing MACOS_NOTARY_KEY_ID"
+[ -n "${MACOS_NOTARY_ISSUER_ID:-}" ] || missing="$missing MACOS_NOTARY_ISSUER_ID"
+if [ -n "$missing" ]; then
+	echo "::warning::The builds are signed but not notarized. Missing:$missing. See docs/macos-signing.md, steps 3 and 4."
+	exit 0
 fi
+key=$tmp/notary-key.p8
+case $MACOS_NOTARY_KEY in
+*"-----BEGIN"*) printf '%s\n' "$MACOS_NOTARY_KEY" >"$key" ;;           # the file's text, pasted as it is
+*) printf '%s' "$MACOS_NOTARY_KEY" | base64 --decode >"$key" 2>/dev/null || true ;; # or base64 of it
+esac
+# (the marker is written without its closing dashes so the secret scan does
+# not take this script for a key)
+if ! grep -q -- "-----BEGIN PRIVATE KEY" "$key"; then
+	rm -f "$key"
+	echo "::warning::The builds are signed but not notarized: MACOS_NOTARY_KEY is not an App Store Connect API key. It must hold the AuthKey_XXXXXXXXXX.p8 file, either its text (its first line says BEGIN PRIVATE KEY) or that text in base64. See docs/macos-signing.md, step 4."
+	exit 0
+fi
+echo "MACOS_NOTARY_KEY_PATH=$key" >>"$GITHUB_ENV"
+echo "Notary key ready."

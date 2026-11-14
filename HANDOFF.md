@@ -25,7 +25,7 @@ decision with its evidence), `spike/RESULTS.md` (measurements), `spike/README.md
 | `internal/cluster` | Parity plus size-tolerance clustering, Java sampling (float32) | Exact vs Java |
 | `internal/overlay` | Streaming overlay with the Java formula and Java target size | Exact size vs Java; profiles within measured tolerance |
 | `internal/detect` | `Detector` interface (PLAN.md 4.2) and `PageDetector` for tiers that look at every page | Done |
-| `gui/` (branch `claude/gui`) | The desktop app, its own Go module (Fyne needs cgo): dark theme, drop zone, options panel, job list, preview window with editable boxes and result pages; headless tests and a screenshot test | Working; run under Xvfb and the Fyne test driver, not yet on a real desktop |
+| `gui/` (branch `claude/gui`) | The desktop app, its own Go module (Fyne needs cgo): dark theme, drop zone, options panel, job list, preview window with editable boxes and result pages; headless tests and a screenshot test | Working; run under Xvfb and the Fyne test driver, not yet on a real desktop. The test driver runs `fyne.Do` callbacks on the calling goroutine (the app runs them on the main thread), so the tests wait for settled UI state rather than a job's state alone, and `go test -race` reports races that exist only under that driver |
 | `internal/app/process.go` | Outputs (straighten re-fit, normalize), AddOCR | Tested |
 | `internal/crop/layer.go` | Content-stream turn about a pivot, invisible Helvetica text layer, also on /Rotate pages | Tested by rendering and text extraction |
 | `internal/ocr`, `internal/raster` | Tesseract finder and TSV reader; image turn and crop | Tested (OCR test skips without Tesseract) |

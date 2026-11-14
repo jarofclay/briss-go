@@ -17,20 +17,29 @@ import (
 // the same core features go-pdfium enables by default (its module uses
 // exception handling); the compilation cache is added on top.
 func newPool(workers int, cacheDir string) (pdfium.Pool, string, error) {
-	rc := wazero.NewRuntimeConfig().WithCoreFeatures(api.CoreFeaturesV2 | experimental.CoreFeaturesExceptionHandling)
+	base := wazero.NewRuntimeConfig().WithCoreFeatures(api.CoreFeaturesV2 | experimental.CoreFeaturesExceptionHandling)
+	start := func(rc wazero.RuntimeConfig) (pdfium.Pool, error) {
+		return webassembly.Init(webassembly.Config{MinIdle: 1, MaxIdle: workers, MaxTotal: workers, RuntimeConfig: rc,
+			Stdout: stdio{os.Stdout}, Stderr: stdio{os.Stderr}})
+	}
 	if cacheDir == "" {
 		cacheDir = DefaultCacheDir()
 	}
 	if cacheDir != "-" {
 		if err := os.MkdirAll(cacheDir, 0o755); err == nil {
 			if cache, err := wazero.NewCompilationCacheWithDir(cacheDir); err == nil {
-				rc = rc.WithCompilationCache(cache)
+				if pool, err := start(base.WithCompilationCache(cache)); err == nil {
+					return pool, "webassembly", nil
+				}
+				// The cache only saves start-up time, so a cache that cannot be
+				// read or written must not stop the engine: on Windows another
+				// process writing the same entry at that moment makes the rename
+				// fail with "Access is denied". Compile without it instead.
 			}
 		}
 		// An unwritable cache directory only costs start-up time, so it is not an error.
 	}
-	pool, err := webassembly.Init(webassembly.Config{MinIdle: 1, MaxIdle: workers, MaxTotal: workers, RuntimeConfig: rc,
-		Stdout: stdio{os.Stdout}, Stderr: stdio{os.Stderr}})
+	pool, err := start(base)
 	return pool, "webassembly", err
 }
 

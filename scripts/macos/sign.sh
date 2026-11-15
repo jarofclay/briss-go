@@ -38,7 +38,12 @@ echo "Signed $path with the Developer ID."
 if [ -n "${MACOS_NOTARY_PROFILE:-}" ]; then
 	notary=(--keychain-profile "$MACOS_NOTARY_PROFILE")
 elif [ -n "${MACOS_NOTARY_KEY_PATH:-}" ]; then
-	notary=(--key "$MACOS_NOTARY_KEY_PATH" --key-id "${MACOS_NOTARY_KEY_ID:?}" --issuer "${MACOS_NOTARY_ISSUER_ID:?}")
+	# cleaned as in signing-setup.sh: no spaces or line breaks, no AuthKey_ or .p8
+	key_id=$(printf '%s' "${MACOS_NOTARY_KEY_ID:?}" | tr -d '[:space:]')
+	key_id=${key_id#AuthKey_}
+	key_id=${key_id%.p8}
+	issuer=$(printf '%s' "${MACOS_NOTARY_ISSUER_ID:?}" | tr -d '[:space:]')
+	notary=(--key "$MACOS_NOTARY_KEY_PATH" --key-id "$key_id" --issuer "$issuer")
 else
 	echo "sign.sh: no notary profile or key, $path is signed but not notarized"
 	exit 0
@@ -50,7 +55,16 @@ ditto -c -k --keepParent "$path" "$zip"
 # warns, rather than stopping a release over it.
 if ! out=$(xcrun notarytool submit "$zip" "${notary[@]}" --wait --timeout 30m --output-format json 2>&1); then
 	echo "$out"
-	echo "::warning::notarytool could not send $path to Apple (check MACOS_NOTARY_KEY, MACOS_NOTARY_KEY_ID and MACOS_NOTARY_ISSUER_ID); it is signed but not notarized"
+	id=$(sed -nE 's/.*"id" *: *"([^"]+)".*/\1/p' <<<"$out")
+	if [ -n "$id" ] && grep -qi 'timeout' <<<"$out"; then
+		# Uploaded, but Apple took longer than the wait (a team's first
+		# submissions can take hours). Its answer is looked up online, so this
+		# very build counts as notarized once Apple accepts it; only the
+		# stapled copy of the ticket is missing.
+		echo "::warning::Apple had not finished checking $path after 30 minutes (submission $id). It was uploaded: once Apple accepts it, Macs accept this build online. Check with: xcrun notarytool info $id"
+	else
+		echo "::warning::notarytool could not send $path to Apple (check MACOS_NOTARY_KEY, MACOS_NOTARY_KEY_ID and MACOS_NOTARY_ISSUER_ID); it is signed but not notarized"
+	fi
 	exit 0
 fi
 echo "$out"

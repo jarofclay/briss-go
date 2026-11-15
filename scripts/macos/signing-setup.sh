@@ -79,5 +79,30 @@ if ! grep -q -- "-----BEGIN PRIVATE KEY" "$key"; then
 	echo "::warning::The builds are signed but not notarized: MACOS_NOTARY_KEY is not an App Store Connect API key. It must hold the AuthKey_XXXXXXXXXX.p8 file, either its text (its first line says BEGIN PRIVATE KEY) or that text in base64. See docs/macos-signing.md, step 4."
 	exit 0
 fi
+
+# The IDs as pasted may carry spaces or line breaks (invisible in the secret
+# form), or the key's file name; sign.sh cleans them the same way.
+clean() { printf '%s' "$1" | tr -d '[:space:]'; }
+key_id=$(clean "$MACOS_NOTARY_KEY_ID")
+key_id=${key_id#AuthKey_}
+key_id=${key_id%.p8}
+issuer=$(clean "$MACOS_NOTARY_ISSUER_ID")
+
+# Ask Apple once whether it accepts the key, before any build is sent: the
+# same check as "xcrun notarytool history" by hand.
+if command -v xcrun >/dev/null && ! answer=$(xcrun notarytool history --key "$key" --key-id "$key_id" --issuer "$issuer" 2>&1); then
+	rm -f "$key"
+	echo "Apple's answer: $(printf '%s' "$answer" | grep -m1 -i 'error' || printf '%s' "$answer" | head -1)"
+	hints=""
+	[ "$key_id" = "$MACOS_NOTARY_KEY_ID" ] || hints="$hints The Key ID secret held extra characters (spaces, line breaks, AuthKey_ or .p8), which were removed."
+	[ "$issuer" = "$MACOS_NOTARY_ISSUER_ID" ] || hints="$hints The Issuer ID secret held spaces or line breaks, which were removed."
+	printf '%s' "$key_id" | grep -Eq '^[A-Z0-9]{10}$' ||
+		hints="$hints MACOS_NOTARY_KEY_ID is not 10 capital letters and digits (it has ${#key_id} characters); it should be the Xs of AuthKey_XXXXXXXXXX.p8."
+	printf '%s' "$issuer" | grep -Eq '^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$' ||
+		hints="$hints MACOS_NOTARY_ISSUER_ID is not shaped like an Issuer ID (8-4-4-4-12 letters and digits, shown above the Team Keys list); a team ID such as ABCDE12345 does not work there."
+	[ -n "$hints" ] || hints=" Both IDs look right, so MACOS_NOTARY_KEY probably holds the .p8 file of another key than MACOS_NOTARY_KEY_ID names: paste the file whose name ends in that Key ID."
+	echo "::warning::Apple refused the notary key, so the builds are signed but not notarized.$hints See docs/macos-signing.md, step 4."
+	exit 0
+fi
 echo "MACOS_NOTARY_KEY_PATH=$key" >>"$GITHUB_ENV"
-echo "Notary key ready."
+echo "Notary key ready; Apple accepts it."

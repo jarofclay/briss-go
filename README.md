@@ -131,9 +131,9 @@ with 2.0 beta, has the app for Linux (`Briss-linux-amd64.tar.gz` for Intel and A
 Builds of every change to `master` are under **Actions**, then **GUI**, the newest run,
 **Artifacts** (you need to be signed in).
 
-- **macOS**: unzip and drag **Briss.app** to Applications. The app is not signed with an
-  Apple Developer ID yet, so macOS blocks it the first time (see
-  [First start on a Mac](#first-start-on-a-mac)).
+- **macOS**: unzip and drag **Briss.app** to Applications, then open it. The release
+  downloads are signed with the project's Apple Developer ID and notarized by Apple, so
+  they open like any other app (see [First start on a Mac](#first-start-on-a-mac)).
 - **Windows**: run **Briss.exe**. SmartScreen may warn about an unknown publisher; choose
   **More info**, **Run anyway**.
 - **Linux**: most file managers no longer start a program on a double-click, so install
@@ -216,30 +216,22 @@ your Developer ID and notarize it, see
 
 #### First start on a Mac
 
-Briss is not signed with an Apple Developer ID or notarized by Apple yet, so macOS
-blocks the app and the command line the first time and asks you to allow them once:
+The macOS app and command line on the **Releases** page are signed with the project's
+Apple Developer ID and notarized by Apple. Double-click **Briss.app** (or run
+`./briss version` in Terminal) and it opens; the first time, macOS may say that Briss was
+downloaded from the internet: click **Open**.
 
-1. Open Briss (double-click **Briss.app**, or run `./briss version` in Terminal). macOS
-   says it could not verify Briss; click **Done**.
+macOS checks the notarization with Apple online the first time. If it says instead that
+it could not verify Briss (the Mac was offline, or the download is a build from the
+**Actions** page, which is not signed with the Developer ID), allow it once:
+
+1. Open Briss and click **Done** when macOS says it could not verify it.
 2. Open **System Settings**, then **Privacy & Security**, and scroll down to **Security**.
    Next to "Briss was blocked to protect your Mac" (or "briss" for the command line)
    click **Open Anyway** and enter your password.
 3. Open Briss again and click **Open Anyway**. From then on it opens normally.
 
-On macOS 14 and older, right-clicking **Briss.app** and choosing **Open** (twice) does the
-same. If macOS says Briss "is damaged and can't be opened", nothing is broken: the first
-2.0.0-beta macOS downloads were missing their (ad-hoc) bundle signature. Download the
-app again, or clear the download flag once in Terminal:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/Briss.app
-```
-
-For the command line, run this in the folder you unpacked it to:
-
-```bash
-xattr -d com.apple.quarantine briss
-```
+On macOS 14 and older, right-clicking **Briss.app** and choosing **Open** does the same.
 
 **For OCR**, install Tesseract once: `brew install tesseract` on macOS, the installer
 from [UB Mannheim](https://github.com/UB-Mannheim/tesseract/wiki) on Windows (keep the
@@ -272,8 +264,8 @@ and double-click `Briss.exe`). The first build takes a few minutes.
 **Ready-made downloads** of the command line are on the repository's **Releases** page:
 `briss_<version>_<system>_<cpu>`, where `darwin` is macOS, `arm64` is Apple silicon or
 another ARM processor, and `amd64` is Intel or AMD. Unpack it and put `briss` (`briss.exe`
-on Windows) in a folder on your `PATH`. On a Mac, allow it once as described in
-[First start on a Mac](#first-start-on-a-mac).
+on Windows) in a folder on your `PATH`. The macOS programs are signed and notarized like
+the app ([First start on a Mac](#first-start-on-a-mac)).
 
 On Linux or macOS, in a terminal in the download folder (use the file name you
 downloaded):
@@ -618,9 +610,10 @@ go test ./...
 
 Release archives for Linux, macOS and Windows are built by goreleaser when a `v*` tag
 is pushed (`.github/workflows/release.yml`, on a Mac; a manual run builds a snapshot).
-The macOS app and programs are signed with the Developer ID and notarized once the
-project's Apple secrets are set, as [docs/macos-signing.md](docs/macos-signing.md)
-describes. CI runs the tests on all three systems and
+On every tag (and manual run) the macOS app and programs are signed with the project's
+Developer ID and notarized by Apple, from the repository's Apple secrets, as
+[docs/macos-signing.md](docs/macos-signing.md) describes; the Windows downloads are not
+signed yet. CI runs the tests on all three systems and
 scans for secrets with gitleaks; `.github/workflows/gui.yml` tests and builds the
 desktop app. The app's tests run without a display (`cd gui && go test ./...`);
 `BRISS_GUI_SHOTS=dir go test -run TestScreenshots .` writes the screenshots above. Never commit API keys or private documents: this is a

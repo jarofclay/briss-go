@@ -108,6 +108,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   submissions), the warning now says the build was uploaded and names the submission to
   check, instead of blaming the secrets.
 
+* The README, the site and the handoff say what is now true: the macOS downloads on the
+  Releases page are signed with the project's Developer ID and notarized, so they open
+  like any other app. The Open Anyway steps stay in the README for builds from the
+  Actions page and for a Mac that is offline the first time.
+
 ## [2.0-beta] - 2026-11-10
 Briss rewritten in Go: a dark drop-and-go desktop app and a command line, with automatic
 crop detection for scanned books (two-page spreads, binding shadows, page edges),

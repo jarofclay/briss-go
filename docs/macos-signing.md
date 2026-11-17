@@ -181,11 +181,12 @@ should answer `accepted` with `source=Notarized Developer ID`. For the command l
 
 ## 6. Release
 
-Push the next `v*` tag as before. `release.yml` (which now runs on a Mac) signs and
+The secrets are set and 2.0.0-beta was signed this way. Push the next `v*` tag as before.
+`release.yml` (which runs on a Mac) signs and
 notarizes the two macOS command-line programs before it packs them, and `gui.yml` does
-the same for the two apps before it attaches them. Once a signed release is out,
-update **First start on a Mac** in the README and the release notes: the Open Anyway
-steps are then only needed for older downloads.
+the same for the two apps before it attaches them. The README's **First start on a Mac**
+says so; its Open Anyway steps remain for builds from the Actions page and for a Mac
+that is offline the first time.
 
 ## On your own Mac
 
